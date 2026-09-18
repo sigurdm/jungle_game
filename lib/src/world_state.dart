@@ -4,9 +4,10 @@ import 'models.dart';
 
 /// Complete mutable simulation state for the 2D side-scrolling jungle world.
 ///
-/// Manages terrain blocks, background shelter walls, player physics, hunger and
-/// cold survival stats, crop growth, fishing casts, native villager trading,
-/// and dangerous animal AI.
+/// Manages terrain blocks, background shelter walls, cellular automata physics
+/// (gravity-driven water flow and fire propagation), player physics, hunger and
+/// cold survival stats, crop growth, beehives and bee pollination, fishing
+/// casts, native villager trading, and wildlife AI.
 ///
 /// {@example example/world_simulation_example.dart}
 final class JungleWorld {
@@ -27,12 +28,14 @@ final class JungleWorld {
     if (width < 20 || height < 20) {
       throw ArgumentError('World dimensions must be at least 20x20 tiles.');
     }
-    // Starter explorer kit so the player can immediately mine, defend, or fish.
+    // Starter explorer kit so the player can immediately mine, defend, fish,
+    // use smoke on beehives, or pour/scoop water.
     inventory[ItemType.woodPickaxe] = 1;
     inventory[ItemType.woodSpear] = 1;
     inventory[ItemType.berrySeeds] = 3;
     inventory[ItemType.jungleBerry] = 3;
-    inventory[ItemType.torchItem] = 2;
+    inventory[ItemType.torchItem] = 3;
+    inventory[ItemType.waterBucket] = 2;
   }
 
   /// Standard pixel size of a single world grid tile.
@@ -68,20 +71,39 @@ final class JungleWorld {
       output: ItemType.doorItem,
       outputCount: 1,
       ingredients: {ItemType.woodPlankItem: 3},
-      description:
-          'Toggleable door that blocks jaguars/snakes and holds warmth.',
+      description: 'Toggleable door that blocks predators and holds warmth.',
     ),
     CraftingRecipe(
       output: ItemType.campfireItem,
       outputCount: 1,
       ingredients: {ItemType.woodLogItem: 2, ItemType.stoneBlock: 2},
-      description: 'Heats enclosed shelters at night and roasts caught fish.',
+      description:
+          'Heats shelters at night, calms bees with smoke, and roasts fish.',
     ),
     CraftingRecipe(
       output: ItemType.torchItem,
       outputCount: 3,
       ingredients: {ItemType.woodLogItem: 1, ItemType.vineFiber: 1},
-      description: 'Provides light and mild warmth underground or in huts.',
+      description:
+          'Lights up caverns, calms beehives for safe honey harvest, or ignites brush.',
+    ),
+    CraftingRecipe(
+      output: ItemType.woodenBeehiveItem,
+      outputCount: 1,
+      ingredients: {
+        ItemType.woodPlankItem: 2,
+        ItemType.thatchBundle: 1,
+        ItemType.honeycomb: 1,
+      },
+      description:
+          'Domesticated apiary hive that produces honey and boosts crop growth by +50%.',
+    ),
+    CraftingRecipe(
+      output: ItemType.waterBucket,
+      outputCount: 2,
+      ingredients: {ItemType.woodLogItem: 1, ItemType.vineFiber: 1},
+      description:
+          'Bamboo water bucket to pour waterfalls, fill moats, or douse spreading fires.',
     ),
     CraftingRecipe(
       output: ItemType.fishingRod,
@@ -134,7 +156,7 @@ final class JungleWorld {
   ];
 
   /// Generates a complete side-scrolling jungle world with rivers, native
-  /// villages, canopy trees, caves, and wildlife.
+  /// villages, canopy trees, wild beehives, caves, and wildlife.
   ///
   /// Runs in $O(W \times H)$ time where $W$ is [width] and $H$ is [height].
   factory JungleWorld.generate({
@@ -156,8 +178,6 @@ final class JungleWorld {
     final surfaceY = List<int>.filled(width, 22);
     double h = 22.0;
     for (int x = 0; x < width; x++) {
-      // Keep flat plateaus for the two native villages (around x=34..48 and x=116..130)
-      // and carved basins for the two rivers (around x=58..68 and x=96..106).
       if (x >= 32 && x <= 48) {
         h = 21.0;
       } else if (x >= 114 && x <= 130) {
@@ -234,26 +254,22 @@ final class JungleWorld {
 
       for (int dx = 0; dx < hutWidth; dx++) {
         final wx = startX + dx;
-        // Sturdy timber floor and stilt supports.
         blocks[floorY][wx] = BlockType.villageHutBlock;
         for (int sy = floorY + 1; sy <= floorY + 3 && sy < height; sy++) {
           if (dx == 0 || dx == hutWidth - 1) {
             blocks[sy][wx] = BlockType.woodPlank;
           }
         }
-        // Thatch roof pyramid.
         blocks[roofY][wx] = BlockType.thatchRoof;
         if (dx >= 1 && dx <= hutWidth - 2) {
           blocks[roofY - 1][wx] = BlockType.thatchRoof;
         }
-        // Clear interior & add insulated village background walls.
         for (int iy = roofY + 1; iy < floorY; iy++) {
           blocks[iy][wx] = BlockType.air;
           walls[iy][wx] = WallType.villageWall;
         }
       }
 
-      // Side pillars & doors on left and right entrances.
       for (int iy = roofY + 1; iy < floorY; iy++) {
         if (iy >= floorY - 2) {
           blocks[iy][startX] = BlockType.doorOpen;
@@ -264,7 +280,6 @@ final class JungleWorld {
         }
       }
 
-      // Warm campfire & torches inside the village hut.
       blocks[floorY - 1][startX + 2] = BlockType.campfire;
       blocks[floorY - 3][startX + 4] = BlockType.torch;
 
@@ -285,7 +300,7 @@ final class JungleWorld {
       surfaceY[38],
       'Kaelo',
       'Sun-Canopy Botanist',
-      'Welcome, explorer! Bring us jungle fruits or roasted fish to trade for rare seeds and warm gear.',
+      'Welcome, explorer! Bring us jungle fruits, golden honeycomb, or roasted fish to trade!',
       const [
         VillageTrade(
           costItem: ItemType.jungleBerry,
@@ -293,6 +308,13 @@ final class JungleWorld {
           rewardItem: ItemType.bananaSeeds,
           rewardCount: 3,
           note: 'Sow Banana Seeds on dirt/grass for rich banana harvests.',
+        ),
+        VillageTrade(
+          costItem: ItemType.honeycomb,
+          costCount: 2,
+          rewardItem: ItemType.mangoSeeds,
+          rewardCount: 3,
+          note: 'Villagers prize sweet Honeycomb! Get 3 Golden Mango Seeds.',
         ),
         VillageTrade(
           costItem: ItemType.banana,
@@ -323,7 +345,7 @@ final class JungleWorld {
       surfaceY[120],
       'Yara',
       'River & Forge Artisan',
-      'The jungle grows freezing after dusk! Trade your fruits or fish for tools and healing herbs.',
+      'The jungle grows freezing after dusk! Trade your fruits, honey, or fish for tools and herbs.',
       const [
         VillageTrade(
           costItem: ItemType.cookedFish,
@@ -331,6 +353,13 @@ final class JungleWorld {
           rewardItem: ItemType.ironMachete,
           rewardCount: 1,
           note: 'Razor-sharp Iron Machete (38 melee damage, fast chopping).',
+        ),
+        VillageTrade(
+          costItem: ItemType.honeycomb,
+          costCount: 2,
+          rewardItem: ItemType.ironMachete,
+          rewardCount: 1,
+          note: 'Trade 2 Golden Honeycombs for a forged Iron Machete!',
         ),
         VillageTrade(
           costItem: ItemType.mango,
@@ -344,7 +373,7 @@ final class JungleWorld {
           costCount: 2,
           rewardItem: ItemType.torchItem,
           rewardCount: 6,
-          note: 'Bundle of resin torches for caves and night warmth.',
+          note: 'Bundle of resin torches for caves, warmth, and calming bees.',
         ),
         VillageTrade(
           costItem: ItemType.rawFish,
@@ -356,9 +385,10 @@ final class JungleWorld {
       ],
     );
 
-    // Populate Mahogany Jungle Trees, Hanging Vines, and Wild Berry Bushes.
+    final animals = <JungleAnimal>[];
+
+    // Populate Mahogany Jungle Trees, Hanging Vines, Beehives, and Wild Berry Bushes.
     for (int x = 6; x < width - 6; x++) {
-      // Skip village footprints and river basins.
       if ((x >= 33 && x <= 47) ||
           (x >= 115 && x <= 129) ||
           (x >= 57 && x <= 69) ||
@@ -368,8 +398,7 @@ final class JungleWorld {
       final gy = surfaceY[x];
       if (blocks[gy][x] != BlockType.grass) continue;
 
-      if (x % 7 == 0 && rng.nextDouble() < 0.78) {
-        // Grow a tall jungle tree with canopy leaves and climbable vines.
+      if (x % 7 == 0 && (rng.nextDouble() < 0.78 || x == 21 || x == 28)) {
         final trunkHeight = 5 + rng.nextInt(4);
         for (int ty = gy - 1; ty >= gy - trunkHeight && ty >= 2; ty--) {
           blocks[ty][x] = BlockType.woodLog;
@@ -402,14 +431,31 @@ final class JungleWorld {
             }
           }
         }
+
+        // Attach a Golden Beehive under selected canopy trees (including near spawn at x=21 & x=28)
+        // and spawn a buzzing Bee Swarm guarding it!
+        if (x == 21 || x == 28 || x % 21 == 0) {
+          final hiveX = (x + 1).clamp(2, width - 2);
+          final hiveY = (topTreeY + 2).clamp(3, gy - 2);
+          blocks[hiveY][hiveX] = BlockType.beehive;
+          animals.add(
+            JungleAnimal(
+              type: AnimalType.beeSwarm,
+              x: hiveX * tileSize + tileSize * 0.5,
+              y: hiveY * tileSize + tileSize * 0.5,
+              homeX: hiveX * tileSize + tileSize * 0.5,
+              homeY: hiveY * tileSize + tileSize * 0.5,
+            ),
+          );
+        }
       } else if (rng.nextDouble() < 0.24 &&
           blocks[gy - 1][x] == BlockType.air) {
         blocks[gy - 1][x] = BlockType.berryBush;
       }
     }
 
-    // Spawn initial wildlife (Jaguars, Snakes, and River Piranhas).
-    final animals = <JungleAnimal>[
+    // Add initial predators (Jaguars, Snakes, and River Piranhas).
+    animals.addAll([
       JungleAnimal(
         type: AnimalType.piranha,
         x: 63 * tileSize,
@@ -422,8 +468,8 @@ final class JungleWorld {
       ),
       JungleAnimal(
         type: AnimalType.snake,
-        x: 20 * tileSize,
-        y: (surfaceY[20] - 1) * tileSize,
+        x: 19 * tileSize,
+        y: (surfaceY[19] - 1) * tileSize,
       ),
       JungleAnimal(
         type: AnimalType.jaguar,
@@ -435,7 +481,7 @@ final class JungleWorld {
         x: 140 * tileSize,
         y: (surfaceY[140] - 1) * tileSize,
       ),
-    ];
+    ]);
 
     final spawnTileX = 28;
     final spawnTileY = surfaceY[spawnTileX] - 1;
@@ -468,11 +514,14 @@ final class JungleWorld {
   /// Native village NPCs available for fruit trading.
   final List<NativeVillager> villagers;
 
-  /// Active dangerous animals in the world.
+  /// Active wildlife entities (predators and bee swarms) in the world.
   final List<JungleAnimal> animals;
 
   /// Active planted crops indexed by `'x,y'` coordinate key.
   final Map<String, CropPlot> crops = {};
+
+  /// Remaining burn ticks per `'x,y'` coordinate for [BlockType.wildfire].
+  final Map<String, int> _fireBurnTicks = {};
 
   /// Inventory quantities owned by the explorer.
   final Map<ItemType, int> inventory = {};
@@ -481,12 +530,12 @@ final class JungleWorld {
   final List<ItemType> hotbar = [
     ItemType.woodPickaxe,
     ItemType.woodSpear,
+    ItemType.torchItem,
+    ItemType.waterBucket,
     ItemType.berrySeeds,
     ItemType.jungleBerry,
     ItemType.woodPlankItem,
     ItemType.thatchRoofItem,
-    ItemType.woodWallItem,
-    ItemType.doorItem,
     ItemType.campfireItem,
     ItemType.fishingRod,
   ];
@@ -532,7 +581,7 @@ final class JungleWorld {
 
   /// Recent status banner message shown in the HUD.
   String statusMessage =
-      'Explore the jungle! Gather seeds, build a shelter with walls & campfire before nightfall.';
+      'Explore the jungle! Harvest 🍯 Honey from Beehives (use 🕯️ Torch smoke!), build shelter & watch flowing water/fire.';
 
   /// Remaining seconds to highlight [statusMessage].
   double statusBannerTimer = 6.0;
@@ -559,6 +608,9 @@ final class JungleWorld {
   /// Whether the explorer has harvested ripe fruit from a crop.
   bool milestoneHarvestedFruit = false;
 
+  /// Whether the explorer has harvested golden honeycomb from a beehive.
+  bool milestoneHarvestedHoney = false;
+
   /// Whether the explorer has stood inside a completed warm shelter.
   bool milestoneBuiltShelter = false;
 
@@ -574,6 +626,7 @@ final class JungleWorld {
   final math.Random _rng;
   double _animalSpawnTimer = 14.0;
   double _weatherTimer = 35.0;
+  double _physicsTickAccumulator = 0.0;
 
   /// Currently selected item in the explorer's hotbar.
   ItemType get equippedItem => hotbar[selectedHotbarIndex];
@@ -615,7 +668,6 @@ final class JungleWorld {
   ///
   /// {@example example/world_simulation_example.dart}
   ShelterEvaluation evaluateShelterStatus(int tx, int ty) {
-    // 1. Check for solid overhead roof within 8 tiles above.
     bool hasRoof = false;
     for (int dy = 1; dy <= 8; dy++) {
       if (getBlock(tx, ty - dy).countsAsRoof) {
@@ -624,13 +676,11 @@ final class JungleWorld {
       }
     }
 
-    // 2. Check background wall insulation at and around the explorer.
     final centerWall = getWall(tx, ty);
     final aboveWall = getWall(tx, ty - 1);
     final hasBgWalls =
         centerWall.providesInsulation && aboveWall.providesInsulation;
 
-    // 3. Check horizontal side walls / closed doors within 6 tiles left & right.
     bool leftWall = false;
     bool rightWall = false;
     for (int dx = 1; dx <= 6; dx++) {
@@ -641,23 +691,23 @@ final class JungleWorld {
     }
     final hasSideEnclosure = leftWall && rightWall;
 
-    // 4. Scan 5-tile radius for placed campfires and torches.
     bool nearCampfire = false;
     bool nearTorch = false;
     for (int dy = -4; dy <= 4; dy++) {
       for (int dx = -5; dx <= 5; dx++) {
         final b = getBlock(tx + dx, ty + dy);
-        if (b == BlockType.campfire) nearCampfire = true;
+        if (b == BlockType.campfire || b == BlockType.wildfire) {
+          nearCampfire = true;
+        }
         if (b == BlockType.torch) nearTorch = true;
       }
     }
 
-    // Compute ambient temperature in Celsius.
     final dayWave = math.sin((timeOfDay - 0.2) * math.pi / 0.56);
-    double temp = 16.0 + 13.0 * dayWave; // ~29°C midday, ~4°C midnight
+    double temp = 16.0 + 13.0 * dayWave;
     if (isRaining) temp -= 4.5;
     if (hasRoof && (hasBgWalls || hasSideEnclosure)) {
-      temp += 9.0; // Shelter enclosure traps body heat
+      temp += 9.0;
     }
     if (nearCampfire) temp += 12.0;
     if (nearTorch) temp += 3.5;
@@ -672,7 +722,7 @@ final class JungleWorld {
     );
   }
 
-  /// Returns the nearest [NativeVillager] within interaction range (110 pixels),
+  /// Returns the nearest [NativeVillager] within interaction range (115 pixels),
   /// or `null` if no villager is nearby.
   NativeVillager? get nearbyVillager {
     for (final v in villagers) {
@@ -692,13 +742,16 @@ final class JungleWorld {
     if (item.category == ItemCategory.seed) {
       milestoneGatheredSeeds = true;
     }
+    if (item == ItemType.honeycomb) {
+      milestoneHarvestedHoney = true;
+    }
     if (!hotbar.contains(item) && hotbar.length < 10) {
       hotbar.add(item);
     }
   }
 
-  /// Consumes one unit of [item] (or the first edible food in the inventory)
-  /// to restore hunger, health, and warmth.
+  /// Consumes one unit of [specificFood] (or the first edible food/honey in the
+  /// inventory) to restore hunger, health, and warmth.
   bool eatFood([ItemType? specificFood]) {
     ItemType? target = specificFood;
     if (target == null || !target.isEdible || (inventory[target] ?? 0) <= 0) {
@@ -714,7 +767,7 @@ final class JungleWorld {
       }
     }
     if (target == null || (inventory[target] ?? 0) <= 0) {
-      setBanner('No edible fruit or cooked fish in your pack!');
+      setBanner('No edible fruit, honey, or cooked fish in your pack!');
       return false;
     }
 
@@ -738,21 +791,21 @@ final class JungleWorld {
   bool sowSeedAt(int tx, int ty) {
     ItemType? seed =
         equippedItem.category == ItemCategory.seed &&
-            (inventory[equippedItem] ?? 0) > 0
-        ? equippedItem
-        : null;
-    seed ??= [
-      ItemType.mangoSeeds,
-      ItemType.bananaSeeds,
-      ItemType.berrySeeds,
-    ].where((s) => (inventory[s] ?? 0) > 0).firstOrNull;
+                (inventory[equippedItem] ?? 0) > 0
+            ? equippedItem
+            : null;
+    seed ??=
+        [
+          ItemType.mangoSeeds,
+          ItemType.bananaSeeds,
+          ItemType.berrySeeds,
+        ].where((s) => (inventory[s] ?? 0) > 0).firstOrNull;
 
     if (seed == null) {
       setBanner('You need seeds (🌱) to sow! Gather wild bushes or trade.');
       return false;
     }
 
-    // Identify soil tile and the air tile directly above it.
     int soilY = ty;
     if (getBlock(tx, ty) == BlockType.air) {
       soilY = ty + 1;
@@ -783,14 +836,90 @@ final class JungleWorld {
     return true;
   }
 
-  /// Harvests a mature crop at ([tx], [ty]) or mines/interacts with the tile.
+  /// Checks whether calming smoke (from a nearby placed [BlockType.campfire] or
+  /// [BlockType.torch], or holding [ItemType.torchItem]) protects the explorer
+  /// when harvesting a beehive at ([tx], [ty]).
+  bool hasBeeCalmingSmokeNear(int tx, int ty) {
+    if (equippedItem == ItemType.torchItem &&
+        (inventory[ItemType.torchItem] ?? 0) > 0) {
+      return true;
+    }
+    for (int dy = -4; dy <= 4; dy++) {
+      for (int dx = -4; dx <= 4; dx++) {
+        final b = getBlock(tx + dx, ty + dy);
+        if (b == BlockType.campfire || b == BlockType.torch) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Harvests [ItemType.honeycomb] from a [BlockType.beehive] at ([tx], [ty]).
+  ///
+  /// If calming smoke is absent, nearby [AnimalType.beeSwarm] entities become
+  /// angry and pursue the explorer.
+  bool harvestHoneyFromHive(int tx, int ty) {
+    if (getBlock(tx, ty) != BlockType.beehive) return false;
+
+    addItem(ItemType.honeycomb, 2);
+    final hasSmoke = hasBeeCalmingSmokeNear(tx, ty);
+    if (hasSmoke) {
+      setBanner(
+        '💨 Smoke calmed the bees! Safely harvested 2x 🍯 Golden Honeycomb!',
+      );
+    } else {
+      _provokeBeesNear(tx, ty);
+      setBanner(
+        '🐝 Harvested 2x 🍯 Honeycomb without smoke — Bee Swarm provoked! Use 🕯️ Torch/Campfire or dive in water!',
+      );
+    }
+    return true;
+  }
+
+  void _provokeBeesNear(int tx, int ty) {
+    final wx = tx * tileSize + tileSize * 0.5;
+    final wy = ty * tileSize + tileSize * 0.5;
+    bool foundExistingSwarm = false;
+    for (final a in animals) {
+      if (a.type == AnimalType.beeSwarm) {
+        final d = math.sqrt(math.pow(a.x - wx, 2) + math.pow(a.y - wy, 2));
+        if (d <= 220.0) {
+          a.isAngry = true;
+          a.angryTimer = 9.0;
+          foundExistingSwarm = true;
+        }
+      }
+    }
+    if (!foundExistingSwarm) {
+      animals.add(
+        JungleAnimal(
+          type: AnimalType.beeSwarm,
+          x: wx,
+          y: wy,
+          homeX: wx,
+          homeY: wy,
+          isAngry: true,
+        )..angryTimer = 9.0,
+      );
+    }
+  }
+
+  /// Harvests a mature crop or beehive at ([tx], [ty]), pours/scoops water,
+  /// ignites brush with a torch, or places a building block/wall.
   bool interactOrPlaceAt(int tx, int ty) {
     if ((tx - playerTileX).abs() > 5 || (ty - playerTileY).abs() > 5) {
       setBanner('Target tile is out of reach! Move closer.');
       return false;
     }
 
-    // 1. Check if a ripe crop is at (tx, ty) or (tx, ty - 1).
+    // 1. Check if tapping a Beehive to harvest Golden Honeycomb!
+    final block = getBlock(tx, ty);
+    if (block == BlockType.beehive) {
+      return harvestHoneyFromHive(tx, ty);
+    }
+
+    // 2. Check if a ripe crop is at (tx, ty) or (tx, ty - 1).
     for (final cy in [ty, ty - 1]) {
       final key = '$tx,$cy';
       final crop = crops[key];
@@ -805,19 +934,48 @@ final class JungleWorld {
       }
     }
 
-    // 2. Toggle shelter doors if tapping a door block.
-    final block = getBlock(tx, ty);
+    // 3. Toggle shelter doors if tapping a door block.
     if (block == BlockType.doorClosed) {
       blocks[ty][tx] = BlockType.doorOpen;
       setBanner('Opened shelter door.');
       return true;
     } else if (block == BlockType.doorOpen) {
       blocks[ty][tx] = BlockType.doorClosed;
-      setBanner('Closed shelter door (blocks predators & traps warmth).');
+      setBanner('Closed shelter door (blocks predators/bees & traps warmth).');
       return true;
     }
 
-    // 3. If holding Fishing Rod and clicking near water, cast or reel in!
+    // 4. Water Bucket: scoop river water or pour gravity-flowing water / douse wildfire!
+    if (equippedItem == ItemType.waterBucket) {
+      if (block == BlockType.water) {
+        blocks[ty][tx] = BlockType.air;
+        addItem(ItemType.waterBucket, 1);
+        setBanner('🪣 Scooped river water into your bucket!');
+        return true;
+      } else if ((inventory[ItemType.waterBucket] ?? 0) > 0 &&
+          (block == BlockType.air || block == BlockType.wildfire)) {
+        blocks[ty][tx] = BlockType.water;
+        _fireBurnTicks.remove('$tx,$ty');
+        inventory[ItemType.waterBucket] = inventory[ItemType.waterBucket]! - 1;
+        setBanner('🪣 Poured flowing water!');
+        return true;
+      }
+    }
+
+    // 5. Holding Torch and tapping a flammable block ignites Spreading Wildfire!
+    if (equippedItem == ItemType.torchItem &&
+        (inventory[ItemType.torchItem] ?? 0) > 0 &&
+        block != BlockType.air &&
+        block.flammability > 0) {
+      blocks[ty][tx] = BlockType.wildfire;
+      _fireBurnTicks['$tx,$ty'] = 0;
+      setBanner(
+        '🔥 Ignited ${block.label}! Fire will spread to nearby foliage!',
+      );
+      return true;
+    }
+
+    // 6. If holding Fishing Rod and clicking near water, cast or reel in!
     if (equippedItem == ItemType.fishingRod || block == BlockType.water) {
       if ((inventory[ItemType.fishingRod] ?? 0) > 0 &&
           (block == BlockType.water || _isWaterNearby(tx, ty))) {
@@ -825,13 +983,13 @@ final class JungleWorld {
       }
     }
 
-    // 4. If holding a seed, sow it.
+    // 7. If holding a seed, sow it.
     if (equippedItem.category == ItemCategory.seed &&
         (inventory[equippedItem] ?? 0) > 0) {
       return sowSeedAt(tx, ty);
     }
 
-    // 5. If holding a building block or background wall, place it.
+    // 8. If holding a building block, beehive, or background wall, place it.
     final item = equippedItem;
     if (item.category == ItemCategory.building && (inventory[item] ?? 0) > 0) {
       if (item.placedWall != null) {
@@ -842,7 +1000,6 @@ final class JungleWorld {
           return true;
         }
       } else if (item.placedBlock != null && block == BlockType.air) {
-        // Prevent placing a solid block directly inside the explorer's body.
         final overlapsPlayer =
             tx == playerTileX && (ty == playerTileY || ty == playerTileY - 1);
         if (!overlapsPlayer || !item.placedBlock!.isSolid) {
@@ -850,8 +1007,18 @@ final class JungleWorld {
           if (item == ItemType.doorItem &&
               ty - 1 >= 0 &&
               blocks[ty - 1][tx] == BlockType.air) {
-            // Doors are 1-tile or 2-tile tall; add background wood wall for seal.
             walls[ty][tx] = WallType.woodWall;
+          }
+          if (item == ItemType.woodenBeehiveItem) {
+            animals.add(
+              JungleAnimal(
+                type: AnimalType.beeSwarm,
+                x: tx * tileSize + tileSize * 0.5,
+                y: ty * tileSize + tileSize * 0.5,
+                homeX: tx * tileSize + tileSize * 0.5,
+                homeY: ty * tileSize + tileSize * 0.5,
+              ),
+            );
           }
           inventory[item] = inventory[item]! - 1;
           setBanner('Placed ${item.icon} ${item.label}.');
@@ -872,8 +1039,26 @@ final class JungleWorld {
     return false;
   }
 
-  /// Casts the fishing line into a water block near ([tx], [ty]) or reels in
-  /// an active bite.
+  bool _isBeePollinationNearby(int tx, int ty) {
+    for (int dy = -6; dy <= 6; dy++) {
+      for (int dx = -6; dx <= 6; dx++) {
+        if (getBlock(tx + dx, ty + dy) == BlockType.beehive) return true;
+      }
+    }
+    final wx = tx * tileSize;
+    final wy = ty * tileSize;
+    for (final a in animals) {
+      if (a.type == AnimalType.beeSwarm &&
+          (a.x - wx).abs() <= 180.0 &&
+          (a.y - wy).abs() <= 180.0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Casts the fishing line into a water block near ([targetTx], [targetTy])
+  /// or reels in an active bite.
   bool toggleFishingCast([int? targetTx, int? targetTy]) {
     if ((inventory[ItemType.fishingRod] ?? 0) <= 0) {
       setBanner(
@@ -899,7 +1084,6 @@ final class JungleWorld {
       }
     }
 
-    // Locate water block to drop bobber.
     int? waterX;
     int? waterY;
     final searchCenterX =
@@ -935,28 +1119,34 @@ final class JungleWorld {
   }
 
   /// Performs a melee swing with the equipped tool/weapon against nearby
-  /// dangerous animals.
+  /// dangerous animals or provoked bee swarms.
   bool attackNearbyAnimals() {
-    swingAnimationTimer = 0.25;
+    swingAnimationTimer = 0.28;
     final damage = equippedItem.attackDamage;
     bool hitAny = false;
 
     for (int i = animals.length - 1; i >= 0; i--) {
       final a = animals[i];
       final dx = a.x - playerX;
-      final dy = a.y - (playerY - 12.0);
+      final dy = a.y - (playerY - 14.0);
       final dist = math.sqrt(dx * dx + dy * dy);
       if (dist <= 68.0) {
         a.health -= damage;
         a.hurtFlashTimer = 0.25;
         a.vx = (dx >= 0 ? 1 : -1) * 160.0;
         a.vy = -120.0;
+        if (a.type == AnimalType.beeSwarm) {
+          a.isAngry = true;
+          a.angryTimer = 8.0;
+        }
         hitAny = true;
         if (a.health <= 0) {
           animals.removeAt(i);
           milestoneDefeatedPredator = true;
           if (a.type == AnimalType.piranha) {
             addItem(ItemType.rawFish, 1);
+          } else if (a.type == AnimalType.beeSwarm) {
+            addItem(ItemType.honeycomb, 1);
           } else {
             addItem(ItemType.vineFiber, 2);
             addItem(ItemType.healingHerb, 1);
@@ -980,7 +1170,6 @@ final class JungleWorld {
       return;
     }
 
-    // First check if a mature crop can be harvested immediately.
     final cropKey = '$tx,$ty';
     if (crops[cropKey]?.isMature == true) {
       interactOrPlaceAt(tx, ty);
@@ -993,6 +1182,14 @@ final class JungleWorld {
         block == BlockType.villageHutBlock) {
       miningTarget = null;
       miningProgress = 0.0;
+      return;
+    }
+
+    // Beating out wildfire directly extinguishes it.
+    if (block == BlockType.wildfire) {
+      blocks[ty][tx] = BlockType.air;
+      _fireBurnTicks.remove('$tx,$ty');
+      setBanner('Beat out the flames!');
       return;
     }
 
@@ -1053,6 +1250,16 @@ final class JungleWorld {
         addItem(ItemType.jungleBerry, 2);
         addItem(ItemType.berrySeeds, 2);
         setBanner('Gathered 🫐 Jungle Berries & 🌱 Berry Seeds!');
+      case BlockType.beehive:
+        addItem(ItemType.honeycomb, 3);
+        if (!hasBeeCalmingSmokeNear(tx, ty)) {
+          _provokeBeesNear(tx, ty);
+          setBanner(
+            '🐝 Broke Beehive without smoke! Got 3x 🍯 Honeycomb, but bees are angry!',
+          );
+        } else {
+          setBanner('💨 Safely harvested Beehive for 3x 🍯 Golden Honeycomb!');
+        }
       case BlockType.woodPlank:
         addItem(ItemType.woodPlankItem, 1);
       case BlockType.thatchRoof:
@@ -1066,8 +1273,136 @@ final class JungleWorld {
         addItem(ItemType.torchItem, 1);
       case BlockType.air:
       case BlockType.water:
+      case BlockType.wildfire:
       case BlockType.villageHutBlock:
         break;
+    }
+  }
+
+  /// Steps the cellular automata block physics once:
+  ///
+  /// 1. **Water Gravity & Lateral Flow**: [BlockType.water] falls into open
+  ///    [BlockType.air] below, douses [BlockType.wildfire], and flows sideways
+  ///    when blocked underneath.
+  /// 2. **Fire Spread & Burnout**: [BlockType.wildfire] (and uncontained
+  ///    [BlockType.campfire] touching foliage) spreads to neighboring blocks
+  ///    according to [BlockType.flammability], and eventually burns out into
+  ///    [BlockType.air] or coal.
+  void stepBlockPhysics() {
+    // 1. Water falls with gravity and flows horizontally (bottom-up scan).
+    final movedWater = <int>{};
+    for (int y = height - 2; y >= 1; y--) {
+      final leftToRight = y.isEven;
+      for (int i = 1; i < width - 1; i++) {
+        final x = leftToRight ? i : (width - 1 - i);
+        if (blocks[y][x] != BlockType.water) continue;
+        if (movedWater.contains(y * width + x)) continue;
+
+        final below = blocks[y + 1][x];
+        if (below == BlockType.wildfire) {
+          blocks[y + 1][x] = BlockType.water;
+          blocks[y][x] = BlockType.air;
+          _fireBurnTicks.remove('$x,${y + 1}');
+          movedWater.add((y + 1) * width + x);
+          continue;
+        }
+        if (below == BlockType.air) {
+          blocks[y + 1][x] = BlockType.water;
+          blocks[y][x] = BlockType.air;
+          movedWater.add((y + 1) * width + x);
+          continue;
+        }
+
+        // If blocked below, extinguish adjacent fire or flow sideways into open air
+        // when there is water pressure above or an open drop-off next to it.
+        for (final dir in leftToRight ? const [-1, 1] : const [1, -1]) {
+          final nx = x + dir;
+          if (nx <= 0 || nx >= width - 1) continue;
+          final side = blocks[y][nx];
+          if (side == BlockType.wildfire) {
+            blocks[y][nx] = BlockType.air;
+            _fireBurnTicks.remove('$nx,$y');
+          } else if (side == BlockType.air &&
+              (blocks[y + 1][nx] == BlockType.air ||
+                  blocks[y - 1][x] == BlockType.water)) {
+            blocks[y][nx] = BlockType.water;
+            blocks[y][x] = BlockType.air;
+            movedWater.add(y * width + nx);
+            break;
+          }
+        }
+      }
+    }
+
+    // 2. Fire propagation & burnout.
+    final newFires = <(int, int)>[];
+    final extinguished = <(int, int)>[];
+
+    for (int y = 1; y < height - 1; y++) {
+      for (int x = 1; x < width - 1; x++) {
+        final b = blocks[y][x];
+        if (b != BlockType.wildfire && b != BlockType.campfire) continue;
+
+        // Check if water is touching this fire.
+        bool touchingWater = false;
+        for (final (dx, dy) in const [(0, -1), (0, 1), (-1, 0), (1, 0)]) {
+          if (blocks[y + dy][x + dx] == BlockType.water) {
+            touchingWater = true;
+            break;
+          }
+        }
+
+        if (b == BlockType.wildfire) {
+          if (touchingWater || (isRaining && _rng.nextDouble() < 0.35)) {
+            extinguished.add((x, y));
+            continue;
+          }
+          final key = '$x,$y';
+          final ticks = (_fireBurnTicks[key] ?? 0) + 1;
+          _fireBurnTicks[key] = ticks;
+          if (ticks >= 7) {
+            extinguished.add((x, y));
+            continue;
+          }
+        }
+
+        // Spread fire to adjacent flammable blocks.
+        for (int dy = -1; dy <= 1; dy++) {
+          for (int dx = -1; dx <= 1; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            final nx = x + dx;
+            final ny = y + dy;
+            final nb = blocks[ny][nx];
+            if (nb.flammability <= 0) continue;
+            // Campfires only ignite immediately adjacent foliage (leaves/vines/bushes).
+            if (b == BlockType.campfire &&
+                nb != BlockType.leaves &&
+                nb != BlockType.vine &&
+                nb != BlockType.berryBush) {
+              continue;
+            }
+            final spreadChance =
+                nb.flammability * (b == BlockType.wildfire ? 0.38 : 0.12);
+            if (_rng.nextDouble() < spreadChance) {
+              newFires.add((nx, ny));
+            }
+          }
+        }
+      }
+    }
+
+    for (final (fx, fy) in extinguished) {
+      if (blocks[fy][fx] == BlockType.wildfire) {
+        blocks[fy][fx] = BlockType.air;
+        _fireBurnTicks.remove('$fx,$fy');
+      }
+    }
+    for (final (nx, ny) in newFires) {
+      if (blocks[ny][nx] == BlockType.beehive) {
+        _provokeBeesNear(nx, ny);
+      }
+      blocks[ny][nx] = BlockType.wildfire;
+      _fireBurnTicks['$nx,$ny'] = 0;
     }
   }
 
@@ -1127,8 +1462,9 @@ final class JungleWorld {
 
   /// Advances the world simulation by [dt] seconds.
   ///
-  /// Updates time of day, weather, hunger and cold survival gauges, planted
-  /// crop growth, active fishing bobber, player movement physics, and animal AI.
+  /// Updates cellular automata physics (water & fire), time of day, weather,
+  /// hunger and cold survival gauges, planted crop growth (boosted by bee
+  /// pollination), active fishing bobber, player movement physics, and animal AI.
   ///
   /// {@example example/world_simulation_example.dart}
   void update(
@@ -1144,6 +1480,13 @@ final class JungleWorld {
     if (swingAnimationTimer > 0) swingAnimationTimer -= clampedDt;
     if (playerHurtFlashTimer > 0) playerHurtFlashTimer -= clampedDt;
 
+    // Step cellular block physics (gravity water flow & spreading fire) at ~7 Hz.
+    _physicsTickAccumulator += clampedDt;
+    if (_physicsTickAccumulator >= 0.14) {
+      _physicsTickAccumulator = 0.0;
+      stepBlockPhysics();
+    }
+
     // 1. Advance Day/Night cycle (1 full day = 150 seconds).
     final prevTime = timeOfDay;
     timeOfDay = (timeOfDay + clampedDt / 150.0) % 1.0;
@@ -1152,7 +1495,6 @@ final class JungleWorld {
       setBanner('☀️ Dawn of Day $dayCount in the Jungle!');
     }
 
-    // Weather transitions.
     _weatherTimer -= clampedDt;
     if (_weatherTimer <= 0) {
       isRaining = _rng.nextDouble() < 0.30;
@@ -1165,10 +1507,8 @@ final class JungleWorld {
       milestoneBuiltShelter = true;
     }
 
-    // Hunger decays slowly (~1.1 points/sec).
     hunger = (hunger - clampedDt * 0.95).clamp(0.0, 100.0);
 
-    // Warmth responds to ambient temperature & shelter protection.
     final coldThreshold = 17.5;
     if (shelter.ambientTemperatureCelsius < coldThreshold &&
         !shelter.isCompleteShelter &&
@@ -1183,7 +1523,17 @@ final class JungleWorld {
       warmth = (warmth + clampedDt * recoveryRate).clamp(0.0, 100.0);
     }
 
-    // Life points drain if starving or freezing; slowly regenerate when well-fed & warm.
+    // Check if standing inside spreading wildfire.
+    if (getBlock(playerTileX, playerTileY) == BlockType.wildfire ||
+        getBlock(playerTileX, (playerY - 4) ~/ tileSize) ==
+            BlockType.wildfire) {
+      health = (health - clampedDt * 12.0).clamp(0.0, 100.0);
+      playerHurtFlashTimer = 0.2;
+      setBanner(
+        '🔥 Burning in wildfire! Jump into water or pour a Water Bucket!',
+      );
+    }
+
     if (hunger <= 0.0) {
       health = (health - clampedDt * 3.2).clamp(0.0, 100.0);
     }
@@ -1194,7 +1544,6 @@ final class JungleWorld {
       health = (health + clampedDt * 1.2).clamp(0.0, 100.0);
     }
 
-    // Respawn explorer at village clearing if life points hit zero.
     if (health <= 0.0) {
       health = 100.0;
       hunger = 75.0;
@@ -1206,12 +1555,14 @@ final class JungleWorld {
       setBanner('Rescued by native villagers! Keep food & shelter ready.');
     }
 
-    // 3. Grow planted crops.
+    // 3. Grow planted crops (boosted by +50% when pollinated by nearby bees/beehives!).
     final growthMultiplier = (isNight ? 0.45 : 1.15) * (isRaining ? 1.35 : 1.0);
     for (final crop in crops.values) {
       if (!crop.isMature) {
         final nearWater = _isWaterNearby(crop.tileX, crop.tileY + 1);
-        final rate = (nearWater ? 0.048 : 0.032) * growthMultiplier;
+        final beePollinated = _isBeePollinationNearby(crop.tileX, crop.tileY);
+        final baseRate = nearWater ? 0.048 : 0.032;
+        final rate = baseRate * growthMultiplier * (beePollinated ? 1.5 : 1.0);
         crop.growthProgress = (crop.growthProgress + clampedDt * rate).clamp(
           0.0,
           1.0,
@@ -1247,7 +1598,7 @@ final class JungleWorld {
       climbDown: climbDown,
     );
 
-    // 6. Update & spawn dangerous animals.
+    // 6. Update & spawn wildlife (including buzzing bee swarms).
     _updateAnimals(clampedDt);
   }
 
@@ -1299,7 +1650,6 @@ final class JungleWorld {
       playerVy = (playerVy + gravity * dt).clamp(-340.0, 420.0);
     }
 
-    // Horizontal step & collision check.
     final nextX = (playerX + playerVx * dt).clamp(
       tileSize,
       (width - 1) * tileSize,
@@ -1307,7 +1657,6 @@ final class JungleWorld {
     if (!_collidesAt(nextX, playerY)) {
       playerX = nextX;
     } else {
-      // Auto-step up 1 single block height if air is above it (smooth mobile/platforming feel).
       if (!_collidesAt(nextX, playerY - tileSize) &&
           _collidesAt(playerX, playerY + 2.0)) {
         playerX = nextX;
@@ -1317,7 +1666,6 @@ final class JungleWorld {
       }
     }
 
-    // Vertical step & ground collision check.
     final nextY = (playerY + playerVy * dt).clamp(
       tileSize * 2,
       (height - 2) * tileSize,
@@ -1336,10 +1684,10 @@ final class JungleWorld {
   bool _collidesAt(double px, double py) {
     const halfW = 9.0;
     const heightPx = 26.0;
-    final leftTile = ((px - halfW) ~/ tileSize);
-    final rightTile = ((px + halfW) ~/ tileSize);
-    final topTile = ((py - heightPx) ~/ tileSize);
-    final bottomTile = ((py - 1.0) ~/ tileSize);
+    final leftTile = (px - halfW) ~/ tileSize;
+    final rightTile = (px + halfW) ~/ tileSize;
+    final topTile = (py - heightPx) ~/ tileSize;
+    final bottomTile = (py - 1.0) ~/ tileSize;
 
     for (int ty = topTile; ty <= bottomTile; ty++) {
       for (int tx = leftTile; tx <= rightTile; tx++) {
@@ -1351,12 +1699,13 @@ final class JungleWorld {
 
   void _updateAnimals(double dt) {
     _animalSpawnTimer -= dt;
-    final maxAnimals = isNight ? 9 : 6;
-    if (_animalSpawnTimer <= 0 && animals.length < maxAnimals) {
+    final landPredatorCount =
+        animals.where((a) => a.type != AnimalType.beeSwarm).length;
+    final maxPredators = isNight ? 9 : 6;
+    if (_animalSpawnTimer <= 0 && landPredatorCount < maxPredators) {
       _animalSpawnTimer = isNight ? 10.0 : 16.0;
       final offsetTiles = (_rng.nextBool() ? 1 : -1) * (14 + _rng.nextInt(12));
       final spawnTx = (playerTileX + offsetTiles).clamp(6, width - 6);
-      // Do not spawn predators directly inside the two native village safe zones.
       final inVillage =
           (spawnTx >= 33 && spawnTx <= 47) ||
           (spawnTx >= 115 && spawnTx <= 129);
@@ -1376,9 +1725,10 @@ final class JungleWorld {
             ),
           );
         } else {
-          final type = (_rng.nextDouble() < (isNight ? 0.6 : 0.4))
-              ? AnimalType.jaguar
-              : AnimalType.snake;
+          final type =
+              (_rng.nextDouble() < (isNight ? 0.6 : 0.4))
+                  ? AnimalType.jaguar
+                  : AnimalType.snake;
           animals.add(
             JungleAnimal(
               type: type,
@@ -1390,10 +1740,69 @@ final class JungleWorld {
       }
     }
 
+    final playerInWater =
+        getBlock(playerTileX, playerTileY) == BlockType.water ||
+        getBlock(playerTileX, (playerY - 4) ~/ tileSize) == BlockType.water;
+
     for (final a in animals) {
       if (a.attackCooldown > 0) a.attackCooldown -= dt;
       if (a.hurtFlashTimer > 0) a.hurtFlashTimer -= dt;
       a.patrolTimer -= dt;
+
+      // Flying Bee Swarm AI: orbits its home beehive unless provoked!
+      if (a.type.flying) {
+        if (a.isAngry) {
+          a.angryTimer -= dt;
+          // Diving into river water or holding calming smoke calms angry bees!
+          if (a.angryTimer <= 0 ||
+              playerInWater ||
+              hasBeeCalmingSmokeNear(playerTileX, playerTileY)) {
+            a.isAngry = false;
+          } else {
+            final dx = playerX - a.x;
+            final dy = (playerY - 18.0) - a.y;
+            final dist = math.max(1.0, math.sqrt(dx * dx + dy * dy));
+            a.facingRight = dx >= 0;
+            a.x += (dx / dist) * a.type.speed * dt;
+            a.y += (dy / dist) * a.type.speed * dt;
+          }
+        }
+        if (!a.isAngry) {
+          //Gentle figure-8 pollination flight around home beehive.
+          final orbitAngle = (timeOfDay * 600.0) + a.homeX * 0.1;
+          final targetX = a.homeX + math.cos(orbitAngle) * 34.0;
+          final targetY = a.homeY + math.sin(orbitAngle * 2.0) * 16.0;
+          a.facingRight = targetX >= a.x;
+          a.x += (targetX - a.x) * 3.0 * dt;
+          a.y += (targetY - a.y) * 3.0 * dt;
+        }
+
+        // Bee sting check when angry.
+        if (a.isAngry && a.attackCooldown <= 0) {
+          final distToPlayer = math.sqrt(
+            math.pow(playerX - a.x, 2) + math.pow((playerY - 16.0) - a.y, 2),
+          );
+          if (distToPlayer < 22.0) {
+            final midTx = (((a.x + playerX) * 0.5) ~/ tileSize).clamp(
+              0,
+              width - 1,
+            );
+            final midTy = (((a.y + playerY - 16.0) * 0.5) ~/ tileSize).clamp(
+              0,
+              height - 1,
+            );
+            if (!getBlock(midTx, midTy).isSolid) {
+              a.attackCooldown = 1.2;
+              health = (health - a.type.contactDamage).clamp(0.0, 100.0);
+              playerHurtFlashTimer = 0.3;
+              setBanner(
+                '🐝 Stung by Angry Bees (-${a.type.contactDamage.round()} HP)! Hold a 🕯️ Torch or dive into water!',
+              );
+            }
+          }
+        }
+        continue;
+      }
 
       final dxToPlayer = playerX - a.x;
       final dyToPlayer = playerY - a.y;
@@ -1430,7 +1839,6 @@ final class JungleWorld {
         final bodyTy = ((a.y - 10) ~/ tileSize).clamp(0, height - 1);
 
         final frontBlock = getBlock(frontTx, bodyTy);
-        // Shelter doors & solid walls block predators; Jaguars can jump 1-tile ledges if not a door/wall.
         if (!frontBlock.isSolid) {
           a.x = nextX;
         } else if (frontBlock != BlockType.doorClosed &&
@@ -1452,7 +1860,6 @@ final class JungleWorld {
         }
       }
 
-      // Check contact bite on explorer (blocked if a solid wall/door separates them).
       if (distToPlayer < 24.0 && a.attackCooldown <= 0) {
         final midTx = (((a.x + playerX) * 0.5) ~/ tileSize).clamp(0, width - 1);
         final midTy = (((a.y + playerY - 16.0) * 0.5) ~/ tileSize).clamp(

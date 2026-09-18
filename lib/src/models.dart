@@ -4,14 +4,15 @@ import 'dart:ui';
 ///
 /// Each tile cell in the foreground grid contains exactly one [BlockType].
 /// Solid blocks prevent player and land-animal movement, whereas non-solid
-/// blocks (such as [air], [water], [vine], [torch], and [campfire]) allow
-/// entities to pass through.
+/// blocks (such as [air], [water], [vine], [torch], [campfire], [wildfire],
+/// and [beehive]) allow entities to pass through.
 enum BlockType {
   /// Empty space.
   air(
     label: 'Air',
     isSolid: false,
     hardness: 0.0,
+    flammability: 0.0,
     primaryColor: Color(0x00000000),
     accentColor: Color(0x00000000),
   ),
@@ -21,6 +22,7 @@ enum BlockType {
     label: 'Jungle Grass',
     isSolid: true,
     hardness: 0.45,
+    flammability: 0.15,
     primaryColor: Color(0xFF2E7D32),
     accentColor: Color(0xFF5D4037),
   ),
@@ -30,6 +32,7 @@ enum BlockType {
     label: 'Jungle Dirt',
     isSolid: true,
     hardness: 0.4,
+    flammability: 0.0,
     primaryColor: Color(0xFF6D4C41),
     accentColor: Color(0xFF4E342E),
   ),
@@ -39,6 +42,7 @@ enum BlockType {
     label: 'Tilled Soil',
     isSolid: true,
     hardness: 0.4,
+    flammability: 0.0,
     primaryColor: Color(0xFF4E342E),
     accentColor: Color(0xFF3E2723),
   ),
@@ -48,6 +52,7 @@ enum BlockType {
     label: 'Jungle Stone',
     isSolid: true,
     hardness: 1.1,
+    flammability: 0.0,
     primaryColor: Color(0xFF607D8B),
     accentColor: Color(0xFF455A64),
   ),
@@ -57,6 +62,7 @@ enum BlockType {
     label: 'Coal Ore',
     isSolid: true,
     hardness: 1.3,
+    flammability: 0.0,
     primaryColor: Color(0xFF546E7A),
     accentColor: Color(0xFF212121),
   ),
@@ -66,6 +72,7 @@ enum BlockType {
     label: 'Iron Ore',
     isSolid: true,
     hardness: 1.6,
+    flammability: 0.0,
     primaryColor: Color(0xFF546E7A),
     accentColor: Color(0xFFD7CCC8),
   ),
@@ -75,6 +82,7 @@ enum BlockType {
     label: 'Mahogany Log',
     isSolid: false,
     hardness: 0.65,
+    flammability: 0.45,
     primaryColor: Color(0xFF5D4037),
     accentColor: Color(0xFF3E2723),
   ),
@@ -84,6 +92,7 @@ enum BlockType {
     label: 'Canopy Leaves',
     isSolid: false,
     hardness: 0.25,
+    flammability: 0.85,
     primaryColor: Color(0xFF1B5E20),
     accentColor: Color(0xFF43A047),
   ),
@@ -93,6 +102,7 @@ enum BlockType {
     label: 'Jungle Vine',
     isSolid: false,
     hardness: 0.2,
+    flammability: 0.75,
     primaryColor: Color(0xFF388E3C),
     accentColor: Color(0xFF81C784),
   ),
@@ -102,15 +112,18 @@ enum BlockType {
     label: 'Wild Fruit Bush',
     isSolid: false,
     hardness: 0.25,
+    flammability: 0.70,
     primaryColor: Color(0xFF2E7D32),
     accentColor: Color(0xFFE53935),
   ),
 
-  /// River or lagoon water block that supports swimming and fishing.
+  /// River or lagoon water block that flows with gravity, extinguishes fire,
+  /// and supports swimming and fishing.
   water(
     label: 'River Water',
     isSolid: false,
     hardness: 0.0,
+    flammability: 0.0,
     primaryColor: Color(0xB30288D1),
     accentColor: Color(0xB34FC3F7),
   ),
@@ -120,6 +133,7 @@ enum BlockType {
     label: 'Wood Plank',
     isSolid: true,
     hardness: 0.6,
+    flammability: 0.35,
     primaryColor: Color(0xFF8D6E63),
     accentColor: Color(0xFF5D4037),
   ),
@@ -129,6 +143,7 @@ enum BlockType {
     label: 'Thatch Roof',
     isSolid: true,
     hardness: 0.45,
+    flammability: 0.65,
     primaryColor: Color(0xFFC0CA33),
     accentColor: Color(0xFF9E9D24),
   ),
@@ -138,6 +153,7 @@ enum BlockType {
     label: 'Closed Door',
     isSolid: true,
     hardness: 0.6,
+    flammability: 0.30,
     primaryColor: Color(0xFF795548),
     accentColor: Color(0xFFFFB300),
   ),
@@ -147,6 +163,7 @@ enum BlockType {
     label: 'Open Door',
     isSolid: false,
     hardness: 0.6,
+    flammability: 0.30,
     primaryColor: Color(0x99795548),
     accentColor: Color(0xFFFFB300),
   ),
@@ -156,17 +173,42 @@ enum BlockType {
     label: 'Campfire',
     isSolid: false,
     hardness: 0.4,
+    flammability: 0.0,
     primaryColor: Color(0xFFFF6F00),
     accentColor: Color(0xFFFFCA28),
   ),
 
-  /// Placed torch that illuminates surroundings and provides mild warmth.
+  /// Placed torch that illuminates surroundings, calms bees with smoke, and
+  /// provides mild warmth.
   torch(
     label: 'Torch',
     isSolid: false,
     hardness: 0.15,
+    flammability: 0.0,
     primaryColor: Color(0xFFFFB300),
     accentColor: Color(0xFFFFF176),
+  ),
+
+  /// Active spreading wildfire that consumes flammable foliage and wood unless
+  /// doused by water or rain.
+  wildfire(
+    label: 'Spreading Wildfire',
+    isSolid: false,
+    hardness: 0.1,
+    flammability: 0.0,
+    primaryColor: Color(0xFFFF3D00),
+    accentColor: Color(0xFFFFEA00),
+  ),
+
+  /// Golden honeycomb beehive hanging beneath tree canopies or placed near
+  /// crops to produce honey and pollinate farms.
+  beehive(
+    label: 'Honeycomb Beehive',
+    isSolid: false,
+    hardness: 0.45,
+    flammability: 0.50,
+    primaryColor: Color(0xFFFFB300),
+    accentColor: Color(0xFFFF8F00),
   ),
 
   /// Indestructible or sturdy native village structure timber.
@@ -174,6 +216,7 @@ enum BlockType {
     label: 'Village Timber',
     isSolid: true,
     hardness: 2.5,
+    flammability: 0.0,
     primaryColor: Color(0xFF6D4C41),
     accentColor: Color(0xFFFFCC80),
   );
@@ -182,6 +225,7 @@ enum BlockType {
     required this.label,
     required this.isSolid,
     required this.hardness,
+    required this.flammability,
     required this.primaryColor,
     required this.accentColor,
   });
@@ -194,6 +238,9 @@ enum BlockType {
 
   /// Base time in seconds required to break this block by hand.
   final double hardness;
+
+  /// Probability factor (`0.0..1.0`) that adjacent fire ignites this block.
+  final double flammability;
 
   /// Primary fill color for procedural tile rendering.
   final Color primaryColor;
@@ -243,7 +290,7 @@ enum WallType {
 
 /// Categories of inventory items held in the explorer's hotbar and pack.
 enum ItemCategory {
-  /// Mining, chopping, and fishing tools.
+  /// Mining, chopping, water bucket, and fishing tools.
   tool,
 
   /// Melee weapons used to defend against dangerous animals.
@@ -252,10 +299,10 @@ enum ItemCategory {
   /// Plantable crop seeds that can be sowed on dirt or grass.
   seed,
 
-  /// Edible fruits, cooked fish, and healing herbs.
+  /// Edible fruits, honey, cooked fish, and healing herbs.
   food,
 
-  /// Placeable foreground blocks, doors, campfires, and background walls.
+  /// Placeable foreground blocks, beehives, doors, campfires, and walls.
   building,
 
   /// Raw crafting materials and wearable survival gear.
@@ -310,6 +357,14 @@ enum ItemType {
     attackDamage: 6.0,
   ),
 
+  /// Bamboo water bucket that scoops water or pours flowing water to douse fires.
+  waterBucket(
+    label: 'Water Bucket',
+    icon: '🪣',
+    category: ItemCategory.tool,
+    placedBlock: BlockType.water,
+  ),
+
   // Seeds
   /// Fast-growing wild jungle berry seeds.
   berrySeeds(label: 'Berry Seeds', icon: '🌱', category: ItemCategory.seed),
@@ -324,7 +379,7 @@ enum ItemType {
     category: ItemCategory.seed,
   ),
 
-  // Fruits & Food
+  // Fruits, Honey & Food
   /// Sweet wild berries that restore moderate hunger.
   jungleBerry(
     label: 'Jungle Berries',
@@ -359,6 +414,16 @@ enum ItemType {
     category: ItemCategory.food,
     hungerRestore: 36.0,
     healthRestore: 14.0,
+  ),
+
+  /// Pure golden honeycomb harvested from jungle beehives.
+  honeycomb(
+    label: 'Golden Honeycomb',
+    icon: '🍯',
+    category: ItemCategory.food,
+    hungerRestore: 35.0,
+    healthRestore: 28.0,
+    warmthRestore: 12.0,
   ),
 
   /// Freshly caught raw river fish (best cooked at a campfire).
@@ -430,7 +495,7 @@ enum ItemType {
     placedBlock: BlockType.doorClosed,
   ),
 
-  /// Placeable campfire that warms shelters and cooks fish.
+  /// Placeable campfire that warms shelters, calms bees, and cooks fish.
   campfireItem(
     label: 'Campfire',
     icon: '🔥',
@@ -438,12 +503,20 @@ enum ItemType {
     placedBlock: BlockType.campfire,
   ),
 
-  /// Placeable torch that lights up caverns and shelters.
+  /// Placeable torch that lights up caverns, calms bees, and warms huts.
   torchItem(
     label: 'Jungle Torch',
     icon: '🕯️',
     category: ItemCategory.building,
     placedBlock: BlockType.torch,
+  ),
+
+  /// Craftable wooden apiary beehive that produces honey and pollinates crops.
+  woodenBeehiveItem(
+    label: 'Crafted Beehive',
+    icon: '🪹',
+    category: ItemCategory.building,
+    placedBlock: BlockType.beehive,
   ),
 
   /// Placeable dirt block for terraforming or farming plots.
@@ -454,7 +527,7 @@ enum ItemType {
     placedBlock: BlockType.dirt,
   ),
 
-  /// Placeable stone block for sturdy walls.
+  /// Placeable stone block for sturdy fireproof walls.
   stoneBlock(
     label: 'Stone Block',
     icon: '🪨',
@@ -653,7 +726,7 @@ final class VillageTrade {
   final String note;
 }
 
-/// Species of dangerous jungle wildlife encountered by the explorer.
+/// Species of wildlife encountered by the explorer in the jungle.
 enum AnimalType {
   /// Fast, agile spotted predator that prowls the jungle floor and leaps.
   jaguar(
@@ -662,6 +735,7 @@ enum AnimalType {
     speed: 92.0,
     contactDamage: 14.0,
     aquatic: false,
+    flying: false,
   ),
 
   /// Venomous emerald pit viper that slithers through tall grass.
@@ -671,6 +745,7 @@ enum AnimalType {
     speed: 60.0,
     contactDamage: 10.0,
     aquatic: false,
+    flying: false,
   ),
 
   /// Aggressive river piranha that patrols jungle water lagoons.
@@ -680,6 +755,17 @@ enum AnimalType {
     speed: 74.0,
     contactDamage: 9.0,
     aquatic: true,
+    flying: false,
+  ),
+
+  /// Buzzing honeybee swarm that pollinates crops and guards its beehive.
+  beeSwarm(
+    label: 'Jungle Bee Swarm',
+    maxHealth: 18.0,
+    speed: 105.0,
+    contactDamage: 6.0,
+    aquatic: false,
+    flying: true,
   );
 
   const AnimalType({
@@ -688,6 +774,7 @@ enum AnimalType {
     required this.speed,
     required this.contactDamage,
     required this.aquatic,
+    required this.flying,
   });
 
   /// Display name of the animal species.
@@ -696,19 +783,22 @@ enum AnimalType {
   /// Starting life points of the animal.
   final double maxHealth;
 
-  /// Horizontal movement speed in world pixels per second.
+  /// Movement speed in world pixels per second.
   final double speed;
 
-  /// Life points deducted from the explorer upon an unblocked bite/claw hit.
+  /// Life points deducted from the explorer upon an unblocked hit/sting.
   final double contactDamage;
 
   /// Whether this creature lives exclusively inside [BlockType.water] tiles.
   final bool aquatic;
+
+  /// Whether this creature flies in the air (such as a [beeSwarm]).
+  final bool flying;
 }
 
-/// Active dangerous animal entity in the jungle world.
+/// Active wildlife entity (predator or bee swarm) in the jungle world.
 final class JungleAnimal {
-  /// Creates a dangerous animal instance at world pixel position ([x], [y]).
+  /// Creates a wildlife instance at world pixel position ([x], [y]).
   JungleAnimal({
     required this.type,
     required this.x,
@@ -716,7 +806,12 @@ final class JungleAnimal {
     this.vx = 0.0,
     this.vy = 0.0,
     this.facingRight = true,
-  }) : health = type.maxHealth;
+    double? homeX,
+    double? homeY,
+    this.isAngry = false,
+  }) : health = type.maxHealth,
+       homeX = homeX ?? x,
+       homeY = homeY ?? y;
 
   /// Species configuration of this animal.
   final AnimalType type;
@@ -726,6 +821,12 @@ final class JungleAnimal {
 
   /// World vertical position in pixels.
   double y;
+
+  /// Anchor horizontal position (e.g. home beehive for [AnimalType.beeSwarm]).
+  double homeX;
+
+  /// Anchor vertical position (e.g. home beehive for [AnimalType.beeSwarm]).
+  double homeY;
 
   /// Horizontal velocity in pixels per second.
   double vx;
@@ -739,7 +840,14 @@ final class JungleAnimal {
   /// Direction the animal is currently facing.
   bool facingRight;
 
-  /// Cooldown timer before the animal can deal another melee bite.
+  /// Whether this creature is currently provoked (used for bee swarms when
+  /// their hive is disturbed without smoke).
+  bool isAngry;
+
+  /// Remaining seconds before a provoked bee swarm calms down.
+  double angryTimer = 0.0;
+
+  /// Cooldown timer before the animal can deal another melee bite or sting.
   double attackCooldown = 0.0;
 
   /// Brief red flash timer when hit by the explorer's weapon.

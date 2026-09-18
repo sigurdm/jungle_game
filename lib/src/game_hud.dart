@@ -93,20 +93,22 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
     NativeVillager? villager,
   ) {
     final tempStr = '${shelter.ambientTemperatureCelsius.round()}°C';
-    final shelterBadgeText = shelter.isCompleteShelter
-        ? (shelter.nearCampfire
-              ? '🏠 Warm Shelter + 🔥'
-              : '🏠 Enclosed Shelter')
-        : (shelter.nearCampfire
-              ? '🔥 By Campfire (No Roof)'
-              : (_world.isNight
+    final shelterBadgeText =
+        shelter.isCompleteShelter
+            ? (shelter.nearCampfire
+                ? '🏠 Warm Shelter + 🔥'
+                : '🏠 Enclosed Shelter')
+            : (shelter.nearCampfire
+                ? '🔥 By Campfire (No Roof)'
+                : (_world.isNight
                     ? '❄️ Cold Night! Build Shelter'
                     : '🌴 Open Jungle'));
-    final shelterBadgeColor = shelter.isCompleteShelter
-        ? const Color(0xFF2E7D32)
-        : (shelter.nearCampfire
-              ? const Color(0xFFEF6C00)
-              : (_world.isNight
+    final shelterBadgeColor =
+        shelter.isCompleteShelter
+            ? const Color(0xFF2E7D32)
+            : (shelter.nearCampfire
+                ? const Color(0xFFEF6C00)
+                : (_world.isNight
                     ? const Color(0xFFC62828)
                     : const Color(0xFF37474F)));
 
@@ -206,12 +208,14 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                 onPressed: _openCraftingModal,
               ),
               _HudChipButton(
-                label: villager != null
-                    ? '🤝 Trade (${villager.name})'
-                    : '🤝 Village Trade',
-                color: villager != null
-                    ? const Color(0xFF00897B)
-                    : const Color(0xFF455A64),
+                label:
+                    villager != null
+                        ? '🤝 Trade (${villager.name})'
+                        : '🤝 Village Trade',
+                color:
+                    villager != null
+                        ? const Color(0xFF00897B)
+                        : const Color(0xFF455A64),
                 onPressed: _openVillageTradeModal,
               ),
               _HudChipButton(
@@ -331,9 +335,8 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
           children: [
             _TapActionButton(
               label: isBiting ? '🎣 REEL!' : '🎣 Fish',
-              color: isBiting
-                  ? const Color(0xFFFFB300)
-                  : const Color(0xFF0277BD),
+              color:
+                  isBiting ? const Color(0xFFFFB300) : const Color(0xFF0277BD),
               onTap: () {
                 _world.toggleFishingCast();
                 setState(() {});
@@ -437,14 +440,16 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: selected
-                            ? const Color(0xFF2E7D32)
-                            : const Color(0xFF1C262B),
+                        color:
+                            selected
+                                ? const Color(0xFF2E7D32)
+                                : const Color(0xFF1C262B),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: selected
-                              ? Colors.lightGreenAccent
-                              : Colors.white24,
+                          color:
+                              selected
+                                  ? Colors.lightGreenAccent
+                                  : Colors.white24,
                           width: selected ? 2.0 : 1.0,
                         ),
                       ),
@@ -578,9 +583,10 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                                               ? '  •  🔥 Requires nearby Campfire'
                                               : ''),
                                       style: TextStyle(
-                                        color: ready
-                                            ? Colors.lightGreenAccent
-                                            : Colors.orangeAccent,
+                                        color:
+                                            ready
+                                                ? Colors.lightGreenAccent
+                                                : Colors.orangeAccent,
                                         fontSize: 11.5,
                                       ),
                                     ),
@@ -588,9 +594,10 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                                 ),
                                 trailing: ElevatedButton(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: ready
-                                        ? const Color(0xFF2E7D32)
-                                        : Colors.grey.shade800,
+                                    backgroundColor:
+                                        ready
+                                            ? const Color(0xFF2E7D32)
+                                            : Colors.grey.shade800,
                                     foregroundColor: Colors.white,
                                   ),
                                   onPressed: () {
@@ -722,10 +729,10 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor:
                                             (_world.inventory[t.costItem] ??
-                                                    0) >=
-                                                t.costCount
-                                            ? const Color(0xFF00897B)
-                                            : Colors.grey.shade800,
+                                                        0) >=
+                                                    t.costCount
+                                                ? const Color(0xFF00897B)
+                                                : Colors.grey.shade800,
                                         foregroundColor: Colors.white,
                                       ),
                                       onPressed: () {
@@ -768,6 +775,10 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
             _world.milestoneHarvestedFruit,
           ),
           (
+            '🍯 Harvest Golden Honeycomb from a Beehive (use 🕯️ Torch smoke!)',
+            _world.milestoneHarvestedHoney,
+          ),
+          (
             '🏠 Build & Stand Inside a Warm Campfire Shelter',
             _world.milestoneBuiltShelter,
           ),
@@ -776,7 +787,7 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
             _world.milestoneCaughtFish,
           ),
           (
-            '🤝 Trade Fruits with a Native Villager',
+            '🤝 Trade Fruits or Honey with a Native Villager',
             _world.milestoneTradedWithNatives,
           ),
           (
@@ -811,9 +822,8 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                           done
                               ? Icons.check_circle
                               : Icons.radio_button_unchecked,
-                          color: done
-                              ? Colors.lightGreenAccent
-                              : Colors.white38,
+                          color:
+                              done ? Colors.lightGreenAccent : Colors.white38,
                           size: 18,
                         ),
                         const SizedBox(width: 8),
