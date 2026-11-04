@@ -3913,7 +3913,7 @@ final class JungleWorld {
         a.facingRight = !a.facingRight;
         a.patrolTimer = 4.5 + _rng.nextDouble() * 3.0;
       }
-      final swimFactor = calmed ? 0.75 : 0.92;
+      final swimFactor = calmed ? 0.85 : 1.0;
       a.vx = (a.facingRight ? swimFactor : -swimFactor) * a.type.speed;
       final wavePhase = timeOfDay * 75.0 + a.homeX * 0.05;
       a.vy = math.sin(wavePhase) * 22.0;
@@ -3922,24 +3922,32 @@ final class JungleWorld {
     // Advance horizontally through water, following sloped riverbed contours
     // and reversing cleanly only when reaching a solid riverbank.
     final nextX = a.x + a.vx * dt;
+    final nextTx = pixelToTile(nextX);
     final lookAheadX = nextX + (a.facingRight ? 10.0 : -10.0);
     final frontTx = pixelToTile(lookAheadX);
     final swimTy = pixelToTile(a.y - 6.0).clamp(0, height - 1);
 
-    if (getBlock(frontTx, swimTy) == BlockType.water) {
+    if (getBlock(frontTx, swimTy) == BlockType.water &&
+        getBlock(nextTx, swimTy) == BlockType.water) {
+      a.x = nextX;
+    } else if (swimTy - 1 >= 0 &&
+        getBlock(frontTx, swimTy - 1) == BlockType.water &&
+        getBlock(curTx, swimTy - 1) == BlockType.water) {
+      a.y = (swimTy - 1) * tileSize + tileSize * 0.55;
       a.x = nextX;
     } else if (swimTy + 1 < height &&
-        getBlock(frontTx, swimTy + 1) == BlockType.water) {
+        getBlock(frontTx, swimTy + 1) == BlockType.water &&
+        getBlock(curTx, swimTy + 1) == BlockType.water) {
+      a.y = (swimTy + 1) * tileSize + tileSize * 0.45;
       a.x = nextX;
-      a.y += 42.0 * dt;
-    } else if (swimTy - 1 >= 0 &&
-        getBlock(frontTx, swimTy - 1) == BlockType.water) {
-      a.x = nextX;
-      a.y -= 42.0 * dt;
     } else {
       a.facingRight = !a.facingRight;
       a.vx = -a.vx;
       a.patrolTimer = 4.5 + _rng.nextDouble() * 3.0;
+      final revX = a.x + a.vx * dt;
+      if (getBlock(pixelToTile(revX), swimTy) == BlockType.water) {
+        a.x = revX;
+      }
     }
 
     // Apply vertical swimming undulation within the water column.
