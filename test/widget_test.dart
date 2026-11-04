@@ -631,12 +631,12 @@ void main() {
         final startX = piranha.x;
         double totalDistanceSwum = 0.0;
         double prevX = startX;
-        for (int step = 0; step < 30; step++) {
-          riverWorld.update(0.1);
+        for (int step = 0; step < 60; step++) {
+          riverWorld.update(0.05);
           totalDistanceSwum += (piranha.x - prevX).abs();
           prevX = piranha.x;
         }
-        expect(totalDistanceSwum, greaterThan(120.0));
+        expect(totalDistanceSwum, greaterThan(180.0));
       },
     );
   });
