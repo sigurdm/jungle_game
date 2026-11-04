@@ -23,7 +23,10 @@ enum SoundCue {
   piranhaSplash(label: 'River Splash!', icon: '🐟', defaultDuration: 0.32),
 
   /// Melodic two-note tropical croak/chirp of a frugivorous Rainbow Toucan.
-  toucanCall(label: 'Toucan Call', icon: '🦜', defaultDuration: 0.38),
+  toucanCall(label: 'Toucan Call', icon: '🦜', defaultDuration: 0.42),
+
+  /// Piercing, raspy two-burst tropical scream of an excited or alarmed Rainbow Toucan.
+  toucanScream(label: 'Toucan Scream!', icon: '🦜', defaultDuration: 0.56),
 
   /// Playful staccato pitch-gliding chatter of a Capuchin Monkey.
   monkeyChatter(label: 'Monkey Chatter', icon: '🐒', defaultDuration: 0.40),
@@ -399,6 +402,7 @@ final class JungleSoundSynthesizer {
       case SoundCue.toucanCall:
         double phase = 0.0;
         for (int i = 0; i < count; i++) {
+          final t = i / sampleRate;
           final progress = i / count;
           final inFirstNote = progress < 0.44;
           final inGap = progress >= 0.44 && progress < 0.54;
@@ -410,16 +414,77 @@ final class JungleSoundSynthesizer {
               inFirstNote
                   ? (progress / 0.44)
                   : ((progress - 0.54) / 0.46).clamp(0.0, 1.0);
+          final croakTrill = 1.0 + 0.08 * math.sin(2 * math.pi * 46.0 * t);
           final freq =
-              inFirstNote
-                  ? 660.0 + math.sin(noteProg * math.pi) * 290.0
-                  : 560.0 + math.sin(noteProg * math.pi) * 240.0;
+              (inFirstNote
+                  ? 660.0 + math.sin(noteProg * math.pi) * 310.0
+                  : 560.0 + math.sin(noteProg * math.pi) * 260.0) *
+              croakTrill;
           phase += freq / sampleRate;
           final noteEnv = math.sin(noteProg * math.pi);
           final tone =
-              math.sin(2 * math.pi * phase) * 0.72 +
-              math.sin(4 * math.pi * phase) * 0.28;
-          out[i] = (tone * noteEnv * 0.85).clamp(-1.0, 1.0);
+              math.sin(2 * math.pi * phase) * 0.65 +
+              math.sin(4 * math.pi * phase) * 0.25 +
+              math.sin(6 * math.pi * phase) * 0.10;
+          out[i] = (tone * noteEnv * 0.88).clamp(-1.0, 1.0);
+        }
+
+      case SoundCue.toucanScream:
+        // Piercing, raspy two-burst Ramphastos toucan scream ("KRRR-AAAK! KRR-EEEEK!")
+        // combining a sharp upward-then-downward vocal sweep, 58 Hz pharyngeal
+        // rattle modulation, nasal beak formants, and breathy rasp noise.
+        double phase1 = 0.0;
+        double phase2 = 0.0;
+        double bandNoise = 0.0;
+        for (int i = 0; i < count; i++) {
+          final t = i / sampleRate;
+          final progress = i / count;
+          final inFirstBurst = progress < 0.45;
+          final inGap = progress >= 0.45 && progress < 0.53;
+          if (inGap) {
+            out[i] = 0.0;
+            continue;
+          }
+          final burstProg =
+              inFirstBurst
+                  ? (progress / 0.45)
+                  : ((progress - 0.53) / 0.47).clamp(0.0, 1.0);
+          // Fast attack, sustained raspy peak, falling tail.
+          final env =
+              burstProg < 0.12
+                  ? (burstProg / 0.12)
+                  : math
+                      .pow(1.0 - ((burstProg - 0.12) / 0.88), 0.55)
+                      .toDouble();
+
+          final baseSweep =
+              inFirstBurst
+                  ? (burstProg < 0.35
+                      ? 780.0 + (burstProg / 0.35) * 720.0
+                      : 1500.0 - ((burstProg - 0.35) / 0.65) * 580.0)
+                  : (burstProg < 0.30
+                      ? 860.0 + (burstProg / 0.30) * 790.0
+                      : 1650.0 - ((burstProg - 0.30) / 0.70) * 740.0);
+
+          // Pharyngeal rattle (58 Hz FM + AM rasp characteristic of toucan screams).
+          final rattleFm = 1.0 + 0.16 * math.sin(2 * math.pi * 58.0 * t);
+          final rattleAm = 0.72 + 0.28 * math.cos(2 * math.pi * 58.0 * t);
+          final freq = baseSweep * rattleFm;
+          phase1 += freq / sampleRate;
+          phase2 += (freq * 1.98) / sampleRate;
+
+          final carrier = math.sin(2 * math.pi * phase1);
+          final nasalFormant = math.sin(2 * math.pi * phase2) * 0.52;
+          final thirdHarmonic = math.sin(6 * math.pi * phase1) * 0.30;
+
+          final white = rng.nextDouble() * 2.0 - 1.0;
+          bandNoise = bandNoise * 0.68 + white * 0.32;
+
+          final raw =
+              ((carrier * 0.58 + nasalFormant + thirdHarmonic) * rattleAm +
+                  bandNoise * 0.28) *
+              env;
+          out[i] = _softClip(raw * 1.45);
         }
 
       case SoundCue.monkeyChatter:

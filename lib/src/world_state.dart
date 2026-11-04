@@ -1430,6 +1430,19 @@ final class JungleWorld {
     );
   }
 
+  /// Returns whether the tile at ([tx], [ty]) is sheltered from falling rain
+  /// by an overhead roof/solid block (`countsAsRoof`) or an enclosing
+  /// background wall (`providesInsulation`).
+  bool isTileShelteredFromRain(int tx, int ty) {
+    if (ty < 0 || ty >= height) return true;
+    if (getBlock(tx, ty).countsAsRoof) return true;
+    if (getWall(tx, ty).providesInsulation) return true;
+    for (int y = ty - 1; y >= 0 && y >= ty - 14; y--) {
+      if (getBlock(tx, y).countsAsRoof) return true;
+    }
+    return false;
+  }
+
   /// Evaluates whether the tile ([tx], [ty]) is inside an insulated shelter
   /// and near heat sources (including bioluminescent glow-bulbs).
   ///
@@ -1637,12 +1650,12 @@ final class JungleWorld {
         duration: 3.5,
       );
       emitSound(
-        SoundCue.toucanCall,
+        SoundCue.toucanScream,
         worldX: targetAnimal.x,
         worldY: targetAnimal.y,
       );
       setBanner(
-        '🦜 Fed ${chosenFruit.icon} to Rainbow Toucan! It ate the fruit, gifted 2x ${giftedSeed.icon} ${giftedSeed.label}, and flew off to sow!',
+        '🦜 Fed ${chosenFruit.icon} to Rainbow Toucan! It let out a happy scream, gifted 2x ${giftedSeed.icon} ${giftedSeed.label}, and flew off to sow!',
       );
     }
     return true;
@@ -2266,10 +2279,22 @@ final class JungleWorld {
 
     for (int i = animals.length - 1; i >= 0; i--) {
       final a = animals[i];
-      if (!a.type.hostileByDefault && !a.isAngry) continue;
       final dx = a.x - playerX;
       final dy = a.y - (playerY - 14.0);
       final dist = math.sqrt(dx * dx + dy * dy);
+      if (a.type == AnimalType.toucan && dist <= 72.0) {
+        a.y -= 10.0;
+        a.facingRight = dx >= 0;
+        a.showBadge('🦜 SCREAM!', duration: 2.2);
+        emitSound(
+          SoundCue.toucanScream,
+          worldX: a.x,
+          worldY: a.y,
+          baseVolume: 0.95,
+        );
+        continue;
+      }
+      if (!a.type.hostileByDefault && !a.isAngry) continue;
       if (dist <= 68.0) {
         a.health -= damage;
         a.hurtFlashTimer = 0.25;
@@ -2569,7 +2594,10 @@ final class JungleWorld {
         }
 
         if (b == BlockType.wildfire) {
-          if (touchingWater || (isRaining && _rng.nextDouble() < 0.35)) {
+          if (touchingWater ||
+              (isRaining &&
+                  !isTileShelteredFromRain(x, y) &&
+                  _rng.nextDouble() < 0.35)) {
             extinguished.add((x, y));
             continue;
           }
@@ -2862,6 +2890,46 @@ final class JungleWorld {
 
         crop.growthProgress = (crop.growthProgress + dt * rate).clamp(0.0, 1.0);
       }
+
+      // Update articulated vine/stem segment count as the plant matures.
+      final targetVineSegments =
+          crop.growthProgress >= 0.95
+              ? 4
+              : crop.growthProgress >= 0.72
+              ? 3
+              : crop.growthProgress >= 0.48
+              ? 2
+              : crop.growthProgress >= 0.24
+              ? 1
+              : 0;
+      if (targetVineSegments > crop.vineSegments) {
+        crop.vineSegments = targetVineSegments;
+      }
+
+      // Climbing vine tendrils: vining species grown beneath canopy leaves,
+      // wooden trellises, or roofs extend climbable vine lianas upward!
+      if (crop.isViningSpecies &&
+          crop.growthProgress >= 0.58 &&
+          crop.tileY >= 3 &&
+          getBlock(crop.tileX, crop.tileY - 1) == BlockType.air) {
+        final above2 = getBlock(crop.tileX, crop.tileY - 2);
+        final above3 = getBlock(crop.tileX, crop.tileY - 3);
+        final hasTrellisAbove =
+            above2 == BlockType.leaves ||
+            above2 == BlockType.woodPlank ||
+            above2 == BlockType.thatchRoof ||
+            above2 == BlockType.vine ||
+            above3 == BlockType.leaves ||
+            above3 == BlockType.woodPlank;
+        if (hasTrellisAbove) {
+          blocks[crop.tileY - 1][crop.tileX] = BlockType.vine;
+          if (above2 == BlockType.air &&
+              (above3 == BlockType.leaves || above3 == BlockType.woodPlank)) {
+            blocks[crop.tileY - 2][crop.tileX] = BlockType.vine;
+          }
+        }
+      }
+
       if (crop.isMature && crop.seedType == ItemType.mahoganySapling) {
         maturedSaplings.add((crop.tileX, crop.tileY));
       }
@@ -3483,6 +3551,27 @@ final class JungleWorld {
   }
 
   void _updateToucan(JungleAnimal a, double dt) {
+    // 0. Predator alarm scream: if a prowling Jaguar or Viper is near the
+    // toucan, it lets out a piercing tropical alarm scream!
+    if (a.patrolTimer <= 0) {
+      for (final predator in animals) {
+        if ((predator.type == AnimalType.jaguar ||
+                predator.type == AnimalType.snake) &&
+            (predator.x - a.x).abs() <= 185.0 &&
+            (predator.y - a.y).abs() <= 140.0) {
+          a.patrolTimer = 5.5 + _rng.nextDouble() * 3.0;
+          a.showBadge('🦜 SCREAM! (${predator.type.label}!)', duration: 2.4);
+          emitSound(
+            SoundCue.toucanScream,
+            worldX: a.x,
+            worldY: a.y,
+            baseVolume: 0.95,
+          );
+          break;
+        }
+      }
+    }
+
     // 1. If the toucan has eaten a fruit and is carrying a seed, fly to open
     // fertile soil and sow it!
     if (a.carriedSeed case final seedToSow?) {
@@ -3624,7 +3713,12 @@ final class JungleWorld {
           final dropTx = tx + (_rng.nextBool() ? 3 : -3);
           a.targetPlantTile = (dropTx, ty);
           milestonePlantAnimalInteraction = true;
-          emitSound(SoundCue.toucanCall, worldX: a.x, worldY: a.y);
+          final ateRipeFruit = crop == null || crop.growthProgress == 0.52;
+          emitSound(
+            ateRipeFruit ? SoundCue.toucanScream : SoundCue.toucanCall,
+            worldX: a.x,
+            worldY: a.y,
+          );
         }
       }
     } else {
@@ -3634,6 +3728,19 @@ final class JungleWorld {
       a.facingRight = targetX >= a.x;
       a.x += (targetX - a.x) * 1.8 * dt;
       a.y += (targetY - a.y) * 1.8 * dt;
+
+      // Periodic canopy scream/call when flying within earshot of the explorer!
+      if (a.patrolTimer <= 0 && (a.x - playerX).abs() <= 320.0) {
+        a.patrolTimer = 7.5 + _rng.nextDouble() * 5.5;
+        final scream = _rng.nextBool();
+        a.showBadge(scream ? '🦜 KREE-AAK!' : '🦜 Croak!', duration: 1.8);
+        emitSound(
+          scream ? SoundCue.toucanScream : SoundCue.toucanCall,
+          worldX: a.x,
+          worldY: a.y,
+          baseVolume: 0.82,
+        );
+      }
     }
   }
 

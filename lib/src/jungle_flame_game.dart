@@ -433,7 +433,7 @@ final class JungleSurvivalGame extends FlameGame
     // 9. Render floating pollen/fireflies, rain droplets & night ambient lighting.
     _renderAtmosphericParticles(canvas, viewW, viewH, cam);
     if (worldState.isRaining) {
-      _renderRainOverlay(canvas, viewW, viewH);
+      _renderRainOverlay(canvas, viewW, viewH, cam);
     }
     _renderNightAndWarmthLighting(canvas, viewW, viewH, cam);
   }
@@ -1147,7 +1147,22 @@ final class JungleSurvivalGame extends FlameGame
         }
 
       case BlockType.berryBush:
-        // Multi-layered bush foliage + glossy 3D ruby berries with white specular dots.
+        // Branching woody shrub stems + layered foliage + realistic drupelet berry clusters.
+        final twigPaint =
+            Paint()
+              ..color = const Color(0xFF4E342E)
+              ..strokeWidth = 2.2
+              ..strokeCap = StrokeCap.round;
+        canvas.drawLine(
+          Offset(left + 16, top + s),
+          Offset(left + 10, top + 14),
+          twigPaint,
+        );
+        canvas.drawLine(
+          Offset(left + 16, top + s),
+          Offset(left + 22, top + 15),
+          twigPaint,
+        );
         canvas.drawOval(
           Rect.fromLTWH(left + 2, top + 7, s - 4, s - 6),
           Paint()..color = const Color(0xFF1B5E20),
@@ -1163,25 +1178,14 @@ final class JungleSurvivalGame extends FlameGame
           Paint()..color = const Color(0xFF388E3C),
         );
         for (final (bx, by) in const [
-          (10.0, 14.0),
-          (21.0, 16.0),
-          (15.0, 22.0),
-          (17.0, 11.0),
+          (9.5, 14.5),
+          (21.5, 16.0),
+          (15.5, 22.0),
         ]) {
-          canvas.drawCircle(
+          _drawRealisticBerryCluster(
+            canvas,
             Offset(left + bx, top + by),
-            3.5,
-            Paint()..color = const Color(0xFFC62828),
-          );
-          canvas.drawCircle(
-            Offset(left + bx - 0.5, top + by - 0.5),
-            2.6,
-            Paint()..color = const Color(0xFFFF1744),
-          );
-          canvas.drawCircle(
-            Offset(left + bx - 1.2, top + by - 1.2),
-            0.9,
-            Paint()..color = Colors.white,
+            scale: 0.88,
           );
         }
 
@@ -1570,365 +1574,524 @@ final class JungleSurvivalGame extends FlameGame
 
     switch (crop.seedType) {
       case ItemType.berrySeeds:
-        // Curved woody shrub stem + layered foliage + 5-petal blossoms or 3D glossy berries.
-        canvas.drawLine(
-          Offset(cx, bottomY),
-          Offset(cx + sway * 0.5, bottomY - stemHeight),
-          stemPaint,
+        // Creeping basal stolons + articulated woody vine stem + curling tendrils
+        // + 5-petal blossoms or realistic clustered drupelet berries.
+        _drawCreepingStolons(
+          canvas,
+          cx,
+          bottomY,
+          crop.growthProgress,
+          const Color(0xFF33691E),
+        );
+        final topPos = _drawArticulatedPlantStem(
+          canvas,
+          cx: cx,
+          bottomY: bottomY,
+          height: stemHeight,
+          sway: sway,
+          progress: crop.growthProgress,
+          nodeCount: crop.stemNodeCount,
+          stemColor: const Color(0xFF388E3C),
+          leafColor: const Color(0xFF2E7D32),
+          veinColor: const Color(0xFFA5D6A7),
+          drawTendrils: true,
         );
         if (crop.stage >= 1) {
           final crownCenter = Offset(
-            cx + sway * 0.35,
-            bottomY - stemHeight * 0.65,
+            cx + sway * 0.45,
+            bottomY - stemHeight * 0.68,
           );
           canvas.drawOval(
             Rect.fromCenter(
               center: crownCenter,
-              width: 16.0 + crop.growthProgress * 7.0,
-              height: 11.0 + crop.growthProgress * 5.0,
+              width: 17.0 + crop.growthProgress * 8.0,
+              height: 11.5 + crop.growthProgress * 5.5,
             ),
             Paint()..color = const Color(0xFF1B5E20),
           );
           canvas.drawOval(
             Rect.fromCenter(
-              center: crownCenter.translate(-2, -1.5),
-              width: 11.0 + crop.growthProgress * 5.0,
-              height: 7.5 + crop.growthProgress * 3.5,
+              center: crownCenter.translate(-2.2, -1.8),
+              width: 12.0 + crop.growthProgress * 5.0,
+              height: 8.0 + crop.growthProgress * 3.5,
             ),
             Paint()..color = const Color(0xFF388E3C),
           );
         }
         if (crop.stage == 2) {
           for (final (ox, oy) in const [
-            (-4.5, 0.72),
-            (4.5, 0.60),
-            (0.0, 0.45),
+            (-5.0, 0.76),
+            (5.0, 0.62),
+            (0.0, 0.46),
           ]) {
-            final fx = cx + ox + sway * 0.3;
-            final fy = bottomY - stemHeight * oy;
-            canvas.drawCircle(
-              Offset(fx, fy),
-              2.8,
-              Paint()..color = Colors.white,
-            );
-            canvas.drawCircle(
-              Offset(fx, fy),
-              1.1,
-              Paint()..color = const Color(0xFFFFD54F),
+            _drawBotanicalBlossom(
+              canvas,
+              Offset(cx + ox + sway * 0.35, bottomY - stemHeight * oy),
+              petalColor: const Color(0xFFFFF9C4),
+              centerColor: const Color(0xFFFFB300),
             );
           }
         } else if (crop.isMature) {
           for (final (ox, oy) in const [
-            (-5.0, 0.75),
-            (4.5, 0.66),
-            (-0.5, 0.48),
-            (3.5, 0.85),
+            (-5.8, 0.74),
+            (5.2, 0.64),
+            (-0.4, 0.46),
+            (3.4, 0.88),
           ]) {
-            final bx = cx + ox + sway * 0.35;
-            final by = bottomY - stemHeight * oy;
-            canvas.drawCircle(
-              Offset(bx, by),
-              3.5,
-              Paint()..color = const Color(0xFFB71C1C),
-            );
-            canvas.drawCircle(
-              Offset(bx - 0.4, by - 0.4),
-              2.6,
-              Paint()..color = const Color(0xFFFF1744),
-            );
-            canvas.drawCircle(
-              Offset(bx - 1.1, by - 1.1),
-              0.9,
-              Paint()..color = Colors.white,
+            _drawRealisticBerryCluster(
+              canvas,
+              Offset(topPos.dx + ox - sway * 0.2, bottomY - stemHeight * oy),
+              scale: 0.96,
             );
           }
         }
 
       case ItemType.bananaSeeds:
-        // Ringed banana pseudo-stem + broad arching palm fronds + hanging banana hands.
-        final topX = cx + sway * 0.4;
+        // Sheathing ringed banana pseudo-stem + veined arching fronds +
+        // drooping rachis stalk with crescent banana hands & crimson banana bell!
+        final topX = cx + sway * 0.45;
         final topY = bottomY - stemHeight;
-        canvas.drawLine(
-          Offset(cx, bottomY),
-          Offset(topX, topY),
+        final trunkPath =
+            Path()
+              ..moveTo(cx - 3.6, bottomY)
+              ..quadraticBezierTo(
+                cx - 2.2,
+                bottomY - stemHeight * 0.5,
+                topX - 2.0,
+                topY,
+              )
+              ..lineTo(topX + 2.0, topY)
+              ..quadraticBezierTo(
+                cx + 2.2,
+                bottomY - stemHeight * 0.5,
+                cx + 3.6,
+                bottomY,
+              )
+              ..close();
+        canvas.drawPath(
+          trunkPath,
           Paint()
-            ..color = const Color(0xFF558B2F)
-            ..strokeWidth = 4.8
-            ..strokeCap = StrokeCap.round,
+            ..shader = Gradient.linear(
+              Offset(cx - 3.6, bottomY),
+              Offset(cx + 3.6, bottomY),
+              [
+                const Color(0xFF33691E),
+                const Color(0xFF7CB342),
+                const Color(0xFF33691E),
+              ],
+              [0.0, 0.45, 1.0],
+            ),
         );
+        // Sheathing leaf-base rings along the pseudo-stem.
+        for (double ry = 5.0; ry < stemHeight - 2.0; ry += 5.5) {
+          canvas.drawLine(
+            Offset(cx - 2.6 + sway * (ry / stemHeight) * 0.3, bottomY - ry),
+            Offset(cx + 2.6 + sway * (ry / stemHeight) * 0.3, bottomY - ry),
+            Paint()
+              ..color = const Color(0x882E4C14)
+              ..strokeWidth = 1.2,
+          );
+        }
         if (crop.stage >= 1) {
-          for (final dirFrond in const [-1.0, 1.0, -0.55, 0.55]) {
-            final frondPath =
+          for (final (dirFrond, lift, len) in const [
+            (-1.0, -7.0, 17.5),
+            (1.0, -7.0, 17.5),
+            (-0.65, -11.0, 13.5),
+            (0.65, -11.0, 13.5),
+          ]) {
+            final endX =
+                topX + dirFrond * len * (0.45 + crop.growthProgress * 0.55);
+            final endY = topY - lift * 0.45 + 4.5;
+            final ctrlX = topX + dirFrond * len * 0.55;
+            final ctrlY = topY + lift * (0.5 + crop.growthProgress * 0.5);
+            // Leaf blade body.
+            final bladePath =
                 Path()
-                  ..moveTo(topX, topY + 2)
-                  ..quadraticBezierTo(
-                    topX + dirFrond * 9.0,
-                    topY - 5.0,
-                    topX + dirFrond * 15.0,
-                    topY + 4.0,
-                  );
+                  ..moveTo(topX, topY + 1.5)
+                  ..quadraticBezierTo(ctrlX, ctrlY - 3.2, endX, endY)
+                  ..quadraticBezierTo(ctrlX, ctrlY + 2.5, topX, topY + 3.5)
+                  ..close();
             canvas.drawPath(
-              frondPath,
+              bladePath,
               Paint()
                 ..color =
                     dirFrond.abs() > 0.8
-                        ? const Color(0xFF7CB342)
-                        : const Color(0xFF9CCC65)
+                        ? const Color(0xFF558B2F)
+                        : const Color(0xFF8BC34A),
+            );
+            // Bright central midrib vein.
+            final midrib =
+                Path()
+                  ..moveTo(topX, topY + 2.0)
+                  ..quadraticBezierTo(ctrlX, ctrlY - 0.5, endX, endY);
+            canvas.drawPath(
+              midrib,
+              Paint()
+                ..color = const Color(0xFFDCEDC8)
                 ..style = PaintingStyle.stroke
-                ..strokeWidth = 3.2
-                ..strokeCap = StrokeCap.round,
+                ..strokeWidth = 1.2,
             );
           }
         }
-        if (crop.isMature) {
-          for (final ox in const [-4.0, -1.0, 2.5, 5.0]) {
-            final bx = topX + ox;
-            final by = bottomY - stemHeight * 0.65;
-            canvas.drawOval(
-              Rect.fromCenter(center: Offset(bx, by), width: 4.5, height: 8.5),
-              Paint()..color = const Color(0xFFFBC02D),
-            );
-            canvas.drawOval(
-              Rect.fromCenter(
-                center: Offset(bx - 0.5, by - 0.5),
-                width: 2.8,
-                height: 6.5,
-              ),
-              Paint()..color = const Color(0xFFFFF176),
-            );
-          }
+        if (crop.stage == 2) {
+          // Drooping flower stalk with purple banana inflorescence bud.
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(topX + 4.0, topY + 6.5),
+              width: 4.5,
+              height: 7.0,
+            ),
+            Paint()..color = const Color(0xFF880E4F),
+          );
+        } else if (crop.isMature) {
+          _drawRealisticBananaBunch(canvas, Offset(topX, topY + 2.0));
         }
 
       case ItemType.mangoSeeds:
-        final topX = cx + sway * 0.4;
+        // Branching woody mango trunk & boughs + veined lancet leaves +
+        // realistic asymmetric kidney-ovoid Mangifera drupes!
+        final topX = cx + sway * 0.35;
         final topY = bottomY - stemHeight;
-        canvas.drawLine(
-          Offset(cx, bottomY),
-          Offset(topX, topY),
-          Paint()
-            ..color = const Color(0xFF5D4037)
-            ..strokeWidth = 3.8
-            ..strokeCap = StrokeCap.round,
-        );
+        final trunkPaint =
+            Paint()
+              ..color = const Color(0xFF5D4037)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 3.8
+              ..strokeCap = StrokeCap.round;
+        final trunkPath =
+            Path()
+              ..moveTo(cx, bottomY)
+              ..quadraticBezierTo(
+                cx - 2.0,
+                bottomY - stemHeight * 0.5,
+                topX,
+                topY,
+              );
+        canvas.drawPath(trunkPath, trunkPaint);
+
         if (crop.stage >= 1) {
-          final r = 7.5 + crop.growthProgress * 4.5;
+          // Forked woody lateral boughs.
+          final branchPaint =
+              Paint()
+                ..color = const Color(0xFF6D4C41)
+                ..strokeWidth = 2.4
+                ..strokeCap = StrokeCap.round;
+          canvas.drawLine(
+            Offset(topX, topY + 5.0),
+            Offset(topX - 8.5 * crop.growthProgress, topY - 1.5),
+            branchPaint,
+          );
+          canvas.drawLine(
+            Offset(topX, topY + 4.0),
+            Offset(topX + 8.5 * crop.growthProgress, topY - 1.0),
+            branchPaint,
+          );
+
+          final r = 8.0 + crop.growthProgress * 5.0;
           canvas.drawCircle(
-            Offset(topX, topY),
-            r,
+            Offset(topX - 4.0, topY + 1.0),
+            r * 0.78,
             Paint()..color = const Color(0xFF1B5E20),
           );
           canvas.drawCircle(
-            Offset(topX - 2, topY - 2),
-            r * 0.72,
+            Offset(topX + 4.0, topY + 1.0),
+            r * 0.78,
+            Paint()..color = const Color(0xFF1B5E20),
+          );
+          canvas.drawCircle(
+            Offset(topX, topY - 2.0),
+            r * 0.85,
+            Paint()..color = const Color(0xFF2E7D32),
+          );
+          canvas.drawCircle(
+            Offset(topX - 2.0, topY - 3.5),
+            r * 0.58,
             Paint()..color = const Color(0xFF43A047),
           );
         }
-        if (crop.isMature) {
-          for (final (ox, oy) in const [(-4.0, 2.0), (4.2, 3.0)]) {
-            final mx = topX + ox;
-            final my = topY + oy;
-            final mRect = Rect.fromCenter(
-              center: Offset(mx, my),
-              width: 7.0,
-              height: 8.8,
+        if (crop.stage == 2) {
+          // Golden-cream mango panicle flower spikes.
+          for (final ox in const [-4.5, 0.0, 4.5]) {
+            _drawBotanicalBlossom(
+              canvas,
+              Offset(topX + ox, topY - 1.5),
+              petalColor: const Color(0xFFFFF8E1),
+              centerColor: const Color(0xFFFF8F00),
             );
-            canvas.drawOval(
-              mRect,
-              Paint()
-                ..shader = Gradient.linear(mRect.topLeft, mRect.bottomRight, [
-                  const Color(0xFFFF5252),
-                  const Color(0xFFFFCA28),
-                ]),
-            );
-            canvas.drawCircle(
-              Offset(mx - 1.2, my - 1.8),
-              1.1,
-              Paint()..color = Colors.white70,
-            );
+          }
+        } else if (crop.isMature) {
+          _drawRealisticMango(canvas, Offset(topX - 5.2, topY + 4.5));
+          _drawRealisticMango(canvas, Offset(topX + 5.0, topY + 5.5));
+          if (crop.isPollinated || crop.lastHabitatMultiplier >= 1.35) {
+            _drawRealisticMango(canvas, Offset(topX + 0.2, topY + 2.0));
           }
         }
 
       case ItemType.healingHerbSeeds:
-        // Aromatic rosette with pulsing emerald ward aura & rising scent motes.
+        // Branching aromatic stems with opposite serrated leaves, midribs,
+        // pulsing emerald ward aura, & tiered floral spike whorls!
         if (crop.stage >= 1) {
           canvas.drawCircle(
-            Offset(cx, bottomY - 10),
-            13.0 + math.sin(_animTime * 4.0) * 2.2,
+            Offset(cx, bottomY - 11),
+            14.0 + math.sin(_animTime * 4.0) * 2.4,
             Paint()
-              ..shader = Gradient.radial(Offset(cx, bottomY - 10), 15.0, [
-                const Color(0x4400E676),
+              ..shader = Gradient.radial(Offset(cx, bottomY - 11), 16.0, [
+                const Color(0x4800E676),
                 const Color(0x0000E676),
               ]),
           );
         }
-        for (final angle in const [-0.62, -0.32, 0.0, 0.32, 0.62]) {
-          final bx = cx + math.sin(angle + sway * 0.04) * stemHeight * 0.75;
-          final by = bottomY - math.cos(angle) * stemHeight * 0.88;
-          canvas.drawLine(
-            Offset(cx, bottomY),
-            Offset(bx, by),
+        for (final (angle, lenScale) in const [
+          (-0.56, 0.78),
+          (0.0, 1.0),
+          (0.56, 0.78),
+        ]) {
+          final branchH = stemHeight * lenScale;
+          final tipX = cx + math.sin(angle + sway * 0.05) * branchH * 0.72;
+          final tipY = bottomY - math.cos(angle) * branchH;
+          final stemPath =
+              Path()
+                ..moveTo(cx, bottomY)
+                ..quadraticBezierTo(
+                  (cx + tipX) * 0.5 - angle * 3.0,
+                  (bottomY + tipY) * 0.5,
+                  tipX,
+                  tipY,
+                );
+          canvas.drawPath(
+            stemPath,
             Paint()
-              ..color =
-                  angle.abs() < 0.2
-                      ? const Color(0xFF69F0AE)
-                      : const Color(0xFF00C853)
-              ..strokeWidth = 3.2
+              ..color = const Color(0xFF00C853)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.6
               ..strokeCap = StrokeCap.round,
           );
-        }
-        if (crop.isMature) {
-          canvas.drawCircle(
-            Offset(cx, bottomY - stemHeight * 0.92),
-            4.5,
-            Paint()..color = const Color(0xFFB9F6CA),
-          );
-          canvas.drawCircle(
-            Offset(cx, bottomY - stemHeight * 0.92),
-            2.0,
-            Paint()..color = Colors.white,
-          );
+          // Opposite paired herb leaves along each stem.
+          if (crop.stage >= 1) {
+            for (final frac in const [0.42, 0.72]) {
+              final lx = cx + (tipX - cx) * frac;
+              final ly = bottomY + (tipY - bottomY) * frac;
+              _drawVeinedLeaf(
+                canvas,
+                Offset(lx, ly),
+                angle: angle - 0.85,
+                length: 6.5 * crop.growthProgress,
+                leafColor: const Color(0xFF69F0AE),
+                veinColor: const Color(0xFFE0F2F1),
+              );
+              _drawVeinedLeaf(
+                canvas,
+                Offset(lx, ly),
+                angle: angle + 0.85,
+                length: 6.5 * crop.growthProgress,
+                leafColor: const Color(0xFF00E676),
+                veinColor: const Color(0xFFE0F2F1),
+              );
+            }
+          }
+          if (crop.isMature) {
+            // Tiered medicinal flower spike whorl at the apex of each stem.
+            for (int w = 0; w < 3; w++) {
+              final wy = tipY + w * 2.6;
+              canvas.drawOval(
+                Rect.fromCenter(
+                  center: Offset(tipX, wy),
+                  width: 6.5 - w,
+                  height: 3.2,
+                ),
+                Paint()..color = const Color(0xFFB9F6CA),
+              );
+              canvas.drawCircle(
+                Offset(tipX, wy),
+                1.3,
+                Paint()..color = const Color(0xFFE1BEE7),
+              );
+            }
+          }
         }
 
       case ItemType.glowBulbSeeds:
-        // Bioluminescent lotus stem, chalice petals, & multi-halo glowing orb!
-        final bulbCenter = Offset(cx + sway * 0.5, bottomY - stemHeight);
-        final glowRadius =
-            11.0 + crop.growthProgress * 12.0 + math.sin(_animTime * 5.0) * 2.5;
-        canvas.drawCircle(
-          bulbCenter,
-          glowRadius,
-          Paint()
-            ..shader = Gradient.radial(bulbCenter, glowRadius, [
-              const Color(0x6600E5FF),
-              const Color(0x0000E5FF),
-            ]),
+        // Winding bioluminescent lotus vine with curling tendrils, veined chalice
+        // sepals, and a ribbed translucent glowing lantern fruit!
+        _drawCreepingStolons(
+          canvas,
+          cx,
+          bottomY,
+          crop.growthProgress,
+          const Color(0xFF00796B),
         );
-        canvas.drawLine(
-          Offset(cx, bottomY),
-          bulbCenter,
-          Paint()
-            ..color = const Color(0xFF00897B)
-            ..strokeWidth = 3.0,
+        final bulbCenter = _drawArticulatedPlantStem(
+          canvas,
+          cx: cx,
+          bottomY: bottomY,
+          height: stemHeight,
+          sway: sway,
+          progress: crop.growthProgress,
+          nodeCount: crop.stemNodeCount,
+          stemColor: const Color(0xFF00897B),
+          leafColor: const Color(0xFF26A69A),
+          veinColor: const Color(0xFF80CBC4),
+          drawTendrils: true,
         );
-        // Lotus chalice leaves cradling the glowing bulb.
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: bulbCenter.translate(-3.5, 2.5),
-            width: 6.5,
-            height: 3.2,
-          ),
-          Paint()..color = const Color(0xFF26A69A),
-        );
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: bulbCenter.translate(3.5, 2.5),
-            width: 6.5,
-            height: 3.2,
-          ),
-          Paint()..color = const Color(0xFF26A69A),
-        );
-        canvas.drawCircle(
-          bulbCenter,
-          4.0 + crop.growthProgress * 3.8,
-          Paint()
-            ..color =
-                crop.isMature
-                    ? const Color(0xFF76FF03)
-                    : const Color(0xFF00E5FF),
-        );
-        canvas.drawCircle(
-          bulbCenter.translate(-1.0, -1.0),
-          1.8 + crop.growthProgress * 1.4,
-          Paint()..color = Colors.white,
-        );
+        _drawRealisticGlowFruit(canvas, bulbCenter, crop);
 
       case ItemType.thornVineSeeds:
-        // Intertwined defensive briar vines with razor-sharp crimson thorns.
-        final briarPaint =
+        // Double-helix twining woody briar vines, creeping basal runners,
+        // coiled tendrils, curved crimson-tipped rose thorns, & briarhips!
+        _drawCreepingStolons(
+          canvas,
+          cx,
+          bottomY,
+          crop.growthProgress,
+          const Color(0xFF33691E),
+        );
+        for (final strand in const [-1.0, 1.0]) {
+          final vPath = Path()..moveTo(cx + strand * 5.5, bottomY);
+          const steps = 6;
+          for (int i = 1; i <= steps; i++) {
+            final frac = i / steps;
+            final twist =
+                math.sin(frac * math.pi * 2.2 + (strand < 0 ? 0.0 : math.pi)) *
+                5.5;
+            final vx = cx + twist + sway * frac;
+            final vy = bottomY - stemHeight * frac;
+            vPath.lineTo(vx, vy);
+
+            // Curved razor-sharp crimson rose thorn at each internode.
+            final thornDir = twist >= 0 ? 1.0 : -1.0;
+            _drawCurvedRoseThorn(canvas, Offset(vx, vy), thornDir);
+          }
+          canvas.drawPath(
+            vPath,
             Paint()
-              ..color = const Color(0xFF33691E)
-              ..strokeWidth = 3.0
-              ..strokeCap = StrokeCap.round;
-        canvas.drawLine(
-          Offset(cx - 6, bottomY),
-          Offset(cx + 5 + sway, bottomY - stemHeight),
-          briarPaint,
-        );
-        canvas.drawLine(
-          Offset(cx + 6, bottomY),
-          Offset(cx - 5 + sway, bottomY - stemHeight),
-          briarPaint,
-        );
-        final thornPaint = Paint()..color = const Color(0xFFFF1744);
-        for (double h = 5; h <= stemHeight; h += 5.5) {
-          canvas.drawCircle(Offset(cx - 5, bottomY - h), 2.2, thornPaint);
-          canvas.drawCircle(Offset(cx + 5, bottomY - h), 2.2, thornPaint);
+              ..color =
+                  strand < 0 ? const Color(0xFF33691E) : const Color(0xFF558B2F)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.8
+              ..strokeCap = StrokeCap.round,
+          );
+        }
+        if (crop.stage >= 1) {
+          _drawSpiralTendril(
+            canvas,
+            Offset(cx - 4.0 + sway * 0.6, bottomY - stemHeight * 0.72),
+            dir: -1.0,
+            color: const Color(0xFF689F38),
+          );
+          _drawSpiralTendril(
+            canvas,
+            Offset(cx + 4.0 + sway * 0.6, bottomY - stemHeight * 0.84),
+            dir: 1.0,
+            color: const Color(0xFF689F38),
+          );
+        }
+        if (crop.isMature) {
+          // Scarlet briar rosehips crowning the thorny vine.
+          for (final ox in const [-4.5, 4.5]) {
+            final hx = cx + ox + sway;
+            final hy = bottomY - stemHeight * 0.82;
+            canvas.drawOval(
+              Rect.fromCenter(center: Offset(hx, hy), width: 4.5, height: 6.2),
+              Paint()..color = const Color(0xFFD50000),
+            );
+            canvas.drawCircle(
+              Offset(hx - 0.8, hy - 1.2),
+              1.0,
+              Paint()..color = const Color(0xFFFF8A80),
+            );
+          }
         }
 
       case ItemType.pitcherPlantSeeds:
-        // Carnivorous Nepenthes pitcher cup with ribbed peristome & overarching hood.
-        canvas.drawLine(
-          Offset(cx, bottomY),
-          Offset(cx, bottomY - stemHeight * 0.6),
-          stemPaint,
+        // Basal rosette leaves whose midrib tendrils loop down and curl up into
+        // a mottled Nepenthes pitcher with fringed wings, striped peristome, & nectar!
+        _drawCreepingStolons(
+          canvas,
+          cx,
+          bottomY,
+          crop.growthProgress,
+          const Color(0xFF2E7D32),
+        );
+        final topPos = _drawArticulatedPlantStem(
+          canvas,
+          cx: cx,
+          bottomY: bottomY,
+          height: stemHeight * 0.75,
+          sway: sway,
+          progress: crop.growthProgress,
+          nodeCount: crop.stemNodeCount,
+          stemColor: const Color(0xFF388E3C),
+          leafColor: const Color(0xFF43A047),
+          veinColor: const Color(0xFFC8E6C9),
+          drawTendrils: true,
         );
         if (crop.stage >= 1) {
-          final cupRect = Rect.fromCenter(
-            center: Offset(cx + sway * 0.5, bottomY - stemHeight * 0.65),
-            width: 11.0 + crop.growthProgress * 4.5,
-            height: 13.0 + crop.growthProgress * 6.5,
-          );
-          canvas.drawOval(
-            cupRect,
-            Paint()
-              ..shader = Gradient.linear(
-                cupRect.topCenter,
-                cupRect.bottomCenter,
-                [const Color(0xFFAB47BC), const Color(0xFF4A148C)],
-              ),
-          );
-          // Ribbed lime-green nectar peristome collar.
-          canvas.drawOval(
-            Rect.fromCenter(
-              center: Offset(cupRect.center.dx, cupRect.top + 2),
-              width: cupRect.width + 2.5,
-              height: 4.5,
-            ),
-            Paint()..color = const Color(0xFFC6FF00),
-          );
-          // Pitcher lid/hood.
-          canvas.drawArc(
-            Rect.fromCenter(
-              center: Offset(cupRect.center.dx + 2, cupRect.top - 3.5),
-              width: 11,
-              height: 6.5,
-            ),
-            math.pi,
-            math.pi,
-            true,
-            Paint()..color = const Color(0xFFCE93D8),
+          _drawRealisticPitcher(
+            canvas,
+            Offset(topPos.dx + sway * 0.35, bottomY - stemHeight * 0.68),
+            crop,
           );
         }
 
       case ItemType.mahoganySapling:
+        final topX = cx + sway * 0.3;
         final topY = bottomY - stemHeight;
-        canvas.drawLine(
-          Offset(cx, bottomY),
-          Offset(cx, topY),
-          Paint()
-            ..color = const Color(0xFF5D4037)
-            ..strokeWidth = 4.2
-            ..strokeCap = StrokeCap.round,
-        );
+        // Flared buttress roots + shaded woody trunk + diverging branches.
+        final saplingTrunk =
+            Path()
+              ..moveTo(cx - 4.0, bottomY)
+              ..quadraticBezierTo(
+                cx - 1.8,
+                bottomY - stemHeight * 0.4,
+                topX - 1.5,
+                topY,
+              )
+              ..lineTo(topX + 1.5, topY)
+              ..quadraticBezierTo(
+                cx + 1.8,
+                bottomY - stemHeight * 0.4,
+                cx + 4.0,
+                bottomY,
+              )
+              ..close();
+        canvas.drawPath(saplingTrunk, Paint()..color = const Color(0xFF5D4037));
+        if (crop.stage >= 1) {
+          canvas.drawLine(
+            Offset(topX, topY + 6.0),
+            Offset(topX - 6.5 * crop.growthProgress, topY + 1.0),
+            Paint()
+              ..color = const Color(0xFF4E342E)
+              ..strokeWidth = 2.4
+              ..strokeCap = StrokeCap.round,
+          );
+          canvas.drawLine(
+            Offset(topX, topY + 5.0),
+            Offset(topX + 6.5 * crop.growthProgress, topY + 0.5),
+            Paint()
+              ..color = const Color(0xFF4E342E)
+              ..strokeWidth = 2.4
+              ..strokeCap = StrokeCap.round,
+          );
+        }
         canvas.drawCircle(
-          Offset(cx, topY),
-          6.5 + crop.growthProgress * 6.5,
+          Offset(topX - 4.0 * crop.growthProgress, topY + 1.5),
+          5.0 + crop.growthProgress * 4.5,
           Paint()..color = const Color(0xFF1B5E20),
         );
         canvas.drawCircle(
-          Offset(cx - 2, topY - 2),
-          4.0 + crop.growthProgress * 4.0,
-          Paint()..color = const Color(0xFF43A047),
+          Offset(topX + 4.0 * crop.growthProgress, topY + 1.5),
+          5.0 + crop.growthProgress * 4.5,
+          Paint()..color = const Color(0xFF2E7D32),
+        );
+        canvas.drawCircle(
+          Offset(topX, topY - 1.5),
+          6.0 + crop.growthProgress * 5.5,
+          Paint()..color = const Color(0xFF388E3C),
+        );
+        canvas.drawCircle(
+          Offset(topX - 1.8, topY - 3.0),
+          3.5 + crop.growthProgress * 3.5,
+          Paint()..color = const Color(0xFF66BB6A),
         );
 
       default:
@@ -1938,6 +2101,613 @@ final class JungleSurvivalGame extends FlameGame
           stemPaint,
         );
     }
+  }
+
+  /// Draws creeping basal stolon runner vines along the ground from the plant's crown.
+  void _drawCreepingStolons(
+    Canvas canvas,
+    double cx,
+    double bottomY,
+    double progress,
+    Color vineColor,
+  ) {
+    if (progress < 0.25) return;
+    final reach = (progress - 0.20) * 18.0;
+    final stolonPaint =
+        Paint()
+          ..color = vineColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0
+          ..strokeCap = StrokeCap.round;
+    for (final dir in const [-1.0, 1.0]) {
+      final path =
+          Path()
+            ..moveTo(cx, bottomY - 1.0)
+            ..quadraticBezierTo(
+              cx + dir * reach * 0.5,
+              bottomY - 4.0,
+              cx + dir * reach,
+              bottomY - 1.2,
+            );
+      canvas.drawPath(path, stolonPaint);
+      if (progress >= 0.55) {
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(cx + dir * reach * 0.65, bottomY - 3.6),
+            width: 5.0,
+            height: 2.8,
+          ),
+          Paint()..color = const Color(0xFF66BB6A),
+        );
+      }
+    }
+  }
+
+  /// Draws an S-curved articulated stem with internode rings, veined leaves on
+  /// petioles, and optional curling spiral vine tendrils. Returns the stem apex.
+  Offset _drawArticulatedPlantStem(
+    Canvas canvas, {
+    required double cx,
+    required double bottomY,
+    required double height,
+    required double sway,
+    required double progress,
+    required int nodeCount,
+    required Color stemColor,
+    required Color leafColor,
+    required Color veinColor,
+    required bool drawTendrils,
+  }) {
+    final topX = cx + sway * 0.55;
+    final topY = bottomY - height;
+    final ctrl1 = Offset(cx - 4.5 * progress, bottomY - height * 0.35);
+    final ctrl2 = Offset(
+      cx + 4.5 * progress + sway * 0.3,
+      bottomY - height * 0.70,
+    );
+
+    final stemPath =
+        Path()
+          ..moveTo(cx, bottomY)
+          ..cubicTo(ctrl1.dx, ctrl1.dy, ctrl2.dx, ctrl2.dy, topX, topY);
+    canvas.drawPath(
+      stemPath,
+      Paint()
+        ..color = stemColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.2
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // Draw nodes, alternating lateral petioles + veined leaves, and curling tendrils.
+    for (int n = 1; n <= nodeCount; n++) {
+      final t = (n / (nodeCount + 0.5)).clamp(0.15, 0.92);
+      final omt = 1.0 - t;
+      final nx =
+          omt * omt * omt * cx +
+          3 * omt * omt * t * ctrl1.dx +
+          3 * omt * t * t * ctrl2.dx +
+          t * t * t * topX;
+      final ny =
+          omt * omt * omt * bottomY +
+          3 * omt * omt * t * ctrl1.dy +
+          3 * omt * t * t * ctrl2.dy +
+          t * t * t * topY;
+
+      // Node ring swelling.
+      canvas.drawCircle(
+        Offset(nx, ny),
+        1.9,
+        Paint()..color = const Color(0xFF1B5E20),
+      );
+
+      final side = n.isEven ? 1.0 : -1.0;
+      final leafLen = (4.5 + progress * 4.5) * (1.0 - t * 0.25);
+      _drawVeinedLeaf(
+        canvas,
+        Offset(nx, ny),
+        angle: side * 0.95,
+        length: leafLen,
+        leafColor: leafColor,
+        veinColor: veinColor,
+      );
+
+      if (drawTendrils && progress >= 0.45 && n >= 2) {
+        _drawSpiralTendril(
+          canvas,
+          Offset(nx + side * 2.5, ny - 1.5),
+          dir: -side,
+          color: veinColor,
+        );
+      }
+    }
+
+    return Offset(topX, topY);
+  }
+
+  /// Draws a botanical leaf on a short petiole with a central midrib vein.
+  void _drawVeinedLeaf(
+    Canvas canvas,
+    Offset origin, {
+    required double angle,
+    required double length,
+    required Color leafColor,
+    required Color veinColor,
+  }) {
+    final tip = Offset(
+      origin.dx + math.sin(angle) * length,
+      origin.dy - math.cos(angle) * length * 0.55,
+    );
+    final perp = Offset(math.cos(angle) * 2.6, math.sin(angle) * 2.6);
+    final mid = Offset((origin.dx + tip.dx) * 0.5, (origin.dy + tip.dy) * 0.5);
+    final leafPath =
+        Path()
+          ..moveTo(origin.dx, origin.dy)
+          ..quadraticBezierTo(
+            mid.dx + perp.dx,
+            mid.dy - perp.dy,
+            tip.dx,
+            tip.dy,
+          )
+          ..quadraticBezierTo(
+            mid.dx - perp.dx,
+            mid.dy + perp.dy,
+            origin.dx,
+            origin.dy,
+          )
+          ..close();
+    canvas.drawPath(leafPath, Paint()..color = leafColor);
+    canvas.drawLine(
+      origin,
+      tip,
+      Paint()
+        ..color = veinColor
+        ..strokeWidth = 0.9,
+    );
+  }
+
+  /// Draws a delicate coiling botanical vine tendril extending from a stem node.
+  void _drawSpiralTendril(
+    Canvas canvas,
+    Offset start, {
+    required double dir,
+    required Color color,
+  }) {
+    final path =
+        Path()
+          ..moveTo(start.dx, start.dy)
+          ..quadraticBezierTo(
+            start.dx + dir * 5.5,
+            start.dy - 4.0,
+            start.dx + dir * 8.0,
+            start.dy - 1.0,
+          )
+          ..arcToPoint(
+            Offset(start.dx + dir * 6.0, start.dy - 3.5),
+            radius: const Radius.circular(2.2),
+            clockwise: dir > 0,
+          );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  void _drawCurvedRoseThorn(Canvas canvas, Offset node, double dir) {
+    final path =
+        Path()
+          ..moveTo(node.dx, node.dy - 1.8)
+          ..quadraticBezierTo(
+            node.dx + dir * 3.5,
+            node.dy - 1.0,
+            node.dx + dir * 4.8,
+            node.dy + 1.5,
+          )
+          ..lineTo(node.dx, node.dy + 1.4)
+          ..close();
+    canvas.drawPath(path, Paint()..color = const Color(0xFFFF1744));
+  }
+
+  void _drawBotanicalBlossom(
+    Canvas canvas,
+    Offset center, {
+    required Color petalColor,
+    required Color centerColor,
+  }) {
+    for (int p = 0; p < 5; p++) {
+      final a = p * (math.pi * 2.0 / 5.0);
+      canvas.drawCircle(
+        Offset(center.dx + math.cos(a) * 2.3, center.dy + math.sin(a) * 2.3),
+        1.7,
+        Paint()..color = petalColor,
+      );
+    }
+    canvas.drawCircle(center, 1.4, Paint()..color = centerColor);
+  }
+
+  /// Renders a realistic clustered drupelet berry with pedicel, green sepal
+  /// calyx, shaded ruby-violet drupelets, and dual specular glints.
+  void _drawRealisticBerryCluster(
+    Canvas canvas,
+    Offset center, {
+    double scale = 1.0,
+  }) {
+    // Slender pedicel stem & green star-shaped calyx cap.
+    canvas.drawLine(
+      Offset(center.dx, center.dy - 5.2 * scale),
+      Offset(center.dx, center.dy - 2.6 * scale),
+      Paint()
+        ..color = const Color(0xFF33691E)
+        ..strokeWidth = 1.2 * scale,
+    );
+    // 4 overlapping 3D shaded drupelet spheres.
+    for (final (dx, dy, r) in const [
+      (-1.5, 0.4, 2.3),
+      (1.5, 0.4, 2.3),
+      (0.0, 1.8, 2.4),
+      (0.0, -0.7, 2.5),
+    ]) {
+      final dc = Offset(center.dx + dx * scale, center.dy + dy * scale);
+      final rad = r * scale;
+      canvas.drawCircle(
+        dc,
+        rad,
+        Paint()
+          ..shader = Gradient.radial(
+            dc.translate(-rad * 0.3, -rad * 0.3),
+            rad * 1.3,
+            [
+              const Color(0xFFFF1744),
+              const Color(0xFFC62828),
+              const Color(0xFF4A0E2E),
+            ],
+            [0.0, 0.62, 1.0],
+          ),
+      );
+      canvas.drawCircle(
+        dc.translate(-rad * 0.35, -rad * 0.35),
+        rad * 0.32,
+        Paint()..color = const Color(0xDDFFFFFF),
+      );
+    }
+    // Green sepal crown on top of the berry cluster.
+    final calyxPath =
+        Path()
+          ..moveTo(center.dx - 2.6 * scale, center.dy - 2.8 * scale)
+          ..lineTo(center.dx, center.dy - 1.4 * scale)
+          ..lineTo(center.dx + 2.6 * scale, center.dy - 2.8 * scale)
+          ..lineTo(center.dx, center.dy - 3.6 * scale)
+          ..close();
+    canvas.drawPath(calyxPath, Paint()..color = const Color(0xFF66BB6A));
+  }
+
+  /// Renders a curved fruiting banana rachis with tiered crescent banana hands
+  /// and a hanging crimson-purple banana heart (male inflorescence bell).
+  void _drawRealisticBananaBunch(Canvas canvas, Offset crown) {
+    // Curved green-brown fruiting rachis stalk.
+    final rachisPath =
+        Path()
+          ..moveTo(crown.dx, crown.dy)
+          ..quadraticBezierTo(
+            crown.dx + 5.5,
+            crown.dy + 6.0,
+            crown.dx + 3.5,
+            crown.dy + 15.5,
+          );
+    canvas.drawPath(
+      rachisPath,
+      Paint()
+        ..color = const Color(0xFF558B2F)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // Tiered hands of curved crescent banana fingers.
+    for (final (ox, oy, angle) in const [
+      (-4.2, 2.5, -0.35),
+      (-1.5, 3.2, -0.15),
+      (1.5, 3.5, 0.12),
+      (4.2, 3.0, 0.32),
+      (-2.5, 7.5, -0.22),
+      (0.8, 8.0, 0.08),
+      (3.6, 7.6, 0.28),
+    ]) {
+      _drawRealisticBananaFinger(
+        canvas,
+        Offset(crown.dx + ox, crown.dy + oy),
+        angle: angle,
+      );
+    }
+
+    // Hanging crimson-purple teardrop banana heart (bell) at the tip of the rachis!
+    final bellCenter = Offset(crown.dx + 3.5, crown.dy + 16.5);
+    final bellPath =
+        Path()
+          ..moveTo(bellCenter.dx, bellCenter.dy - 2.8)
+          ..quadraticBezierTo(
+            bellCenter.dx + 3.2,
+            bellCenter.dy,
+            bellCenter.dx,
+            bellCenter.dy + 3.8,
+          )
+          ..quadraticBezierTo(
+            bellCenter.dx - 3.2,
+            bellCenter.dy,
+            bellCenter.dx,
+            bellCenter.dy - 2.8,
+          )
+          ..close();
+    canvas.drawPath(
+      bellPath,
+      Paint()
+        ..shader = Gradient.linear(
+          bellCenter.translate(0, -3),
+          bellCenter.translate(0, 4),
+          [const Color(0xFFAD1457), const Color(0xFF4A148C)],
+        ),
+    );
+  }
+
+  void _drawRealisticBananaFinger(
+    Canvas canvas,
+    Offset top, {
+    required double angle,
+  }) {
+    canvas.save();
+    canvas.translate(top.dx, top.dy);
+    canvas.rotate(angle);
+    final fingerPath =
+        Path()
+          ..moveTo(0, 0)
+          ..quadraticBezierTo(2.8, 3.8, 1.2, 8.2)
+          ..quadraticBezierTo(-1.2, 4.2, -1.2, 0.4)
+          ..close();
+    canvas.drawPath(
+      fingerPath,
+      Paint()
+        ..shader = Gradient.linear(
+          Offset.zero,
+          const Offset(1.2, 8.2),
+          [
+            const Color(0xFFAED581),
+            const Color(0xFFFFEE58),
+            const Color(0xFFFBC02D),
+          ],
+          [0.0, 0.28, 1.0],
+        ),
+    );
+    // Dark floral remnant tip at bottom of banana finger.
+    canvas.drawCircle(
+      const Offset(1.1, 8.0),
+      0.7,
+      Paint()..color = const Color(0xFF3E2723),
+    );
+    canvas.restore();
+  }
+
+  /// Renders an asymmetric kidney-ovoid Mangifera mango drupe with a woody
+  /// pedicel, crimson-to-golden-to-lime tropical blush, lenticels, & sheen.
+  void _drawRealisticMango(Canvas canvas, Offset center) {
+    // Woody pedicel & tiny leaf.
+    canvas.drawLine(
+      Offset(center.dx, center.dy - 6.0),
+      Offset(center.dx, center.dy - 3.5),
+      Paint()
+        ..color = const Color(0xFF5D4037)
+        ..strokeWidth = 1.3,
+    );
+    // Asymmetric kidney-ovoid mango contour with curved lower beak.
+    final mangoPath =
+        Path()
+          ..moveTo(center.dx, center.dy - 4.2)
+          ..cubicTo(
+            center.dx + 4.8,
+            center.dy - 4.0,
+            center.dx + 4.5,
+            center.dy + 2.5,
+            center.dx + 1.4,
+            center.dy + 5.0,
+          )
+          ..quadraticBezierTo(
+            center.dx - 0.5,
+            center.dy + 5.6,
+            center.dx - 1.8,
+            center.dy + 4.0,
+          )
+          ..cubicTo(
+            center.dx - 4.2,
+            center.dy + 1.5,
+            center.dx - 4.2,
+            center.dy - 3.8,
+            center.dx,
+            center.dy - 4.2,
+          )
+          ..close();
+    final bounds = Rect.fromCenter(center: center, width: 8.5, height: 9.5);
+    canvas.drawPath(
+      mangoPath,
+      Paint()
+        ..shader = Gradient.linear(
+          bounds.topLeft,
+          bounds.bottomRight,
+          [
+            const Color(0xFFE53935),
+            const Color(0xFFFFB300),
+            const Color(0xFFC0CA33),
+          ],
+          [0.0, 0.58, 1.0],
+        ),
+    );
+    // Curved specular highlight along upper shoulder + lenticel dots.
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: center.translate(-1.3, -1.6),
+        width: 2.0,
+        height: 3.4,
+      ),
+      Paint()..color = const Color(0x99FFFFFF),
+    );
+    canvas.drawCircle(
+      center.translate(1.2, 1.4),
+      0.5,
+      Paint()..color = const Color(0x88FFF9C4),
+    );
+  }
+
+  /// Renders a ribbed translucent bioluminescent lantern fruit with veined
+  /// basal calyx sepals and internal glowing seed filaments.
+  void _drawRealisticGlowFruit(
+    Canvas canvas,
+    Offset bulbCenter,
+    CropPlot crop,
+  ) {
+    final glowRadius =
+        12.0 + crop.growthProgress * 13.0 + math.sin(_animTime * 5.0) * 2.5;
+    canvas.drawCircle(
+      bulbCenter,
+      glowRadius,
+      Paint()
+        ..shader = Gradient.radial(
+          bulbCenter,
+          glowRadius,
+          [
+            const Color(0x7700E5FF),
+            const Color(0x2276FF03),
+            const Color(0x0000E5FF),
+          ],
+          [0.0, 0.55, 1.0],
+        ),
+    );
+    // Veined chalice sepals cradling the lantern fruit.
+    for (final dir in const [-1.0, 1.0]) {
+      _drawVeinedLeaf(
+        canvas,
+        bulbCenter.translate(0, 3.0),
+        angle: dir * 1.15,
+        length: 6.5,
+        leafColor: const Color(0xFF00897B),
+        veinColor: const Color(0xFF80CBC4),
+      );
+    }
+    final podW = 7.5 + crop.growthProgress * 5.5;
+    final podH = 9.0 + crop.growthProgress * 6.5;
+    final podRect = Rect.fromCenter(
+      center: bulbCenter,
+      width: podW,
+      height: podH,
+    );
+    canvas.drawOval(
+      podRect,
+      Paint()
+        ..shader = Gradient.radial(
+          bulbCenter,
+          podH * 0.6,
+          [
+            Colors.white,
+            crop.isMature ? const Color(0xFF76FF03) : const Color(0xFF00E5FF),
+            const Color(0xFF00838F),
+          ],
+          [0.0, 0.55, 1.0],
+        ),
+    );
+    // Longitudinal lantern ribs.
+    for (final rx in const [-0.28, 0.0, 0.28]) {
+      canvas.drawArc(
+        Rect.fromCenter(
+          center: bulbCenter.translate(podW * rx, 0),
+          width: podW * 0.45,
+          height: podH * 0.92,
+        ),
+        -math.pi * 0.5,
+        math.pi,
+        false,
+        Paint()
+          ..color = const Color(0x88E0F7FA)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.9,
+      );
+    }
+  }
+
+  /// Renders a detailed Nepenthes carnivorous pitcher with looped tendril,
+  /// fringed ventral wings, striped peristome lip, veined hood, & golden nectar.
+  void _drawRealisticPitcher(Canvas canvas, Offset center, CropPlot crop) {
+    final cupW = 11.5 + crop.growthProgress * 4.5;
+    final cupH = 14.0 + crop.growthProgress * 6.5;
+    final cupRect = Rect.fromCenter(center: center, width: cupW, height: cupH);
+
+    // Mottled crimson-burgundy ascidium trap body.
+    canvas.drawOval(
+      cupRect,
+      Paint()
+        ..shader = Gradient.linear(
+          cupRect.topCenter,
+          cupRect.bottomCenter,
+          [
+            const Color(0xFFBA68C8),
+            const Color(0xFF8E24AA),
+            const Color(0xFF4A148C),
+          ],
+          [0.0, 0.5, 1.0],
+        ),
+    );
+    // Botanical mottling blotches & fringed ventral wings.
+    for (final (bx, by) in const [(-2.5, 1.5), (2.2, 3.2), (-1.0, -1.5)]) {
+      canvas.drawCircle(
+        center.translate(bx, by),
+        1.4,
+        Paint()..color = const Color(0x66311B92),
+      );
+    }
+    // Golden digestive nectar meniscus glowing inside the throat when mature!
+    if (crop.isMature || crop.isFertilized) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(center.dx, cupRect.top + 3.2),
+          width: cupW * 0.72,
+          height: 3.0,
+        ),
+        Paint()..color = const Color(0xFFFFD54F),
+      );
+    }
+    // Ribbed lime-and-crimson striped peristome collar.
+    final peristomeRect = Rect.fromCenter(
+      center: Offset(center.dx, cupRect.top + 1.8),
+      width: cupW + 3.0,
+      height: 4.6,
+    );
+    canvas.drawOval(peristomeRect, Paint()..color = const Color(0xFFC6FF00));
+    for (double sx = -cupW * 0.4; sx <= cupW * 0.4; sx += 3.0) {
+      canvas.drawLine(
+        Offset(center.dx + sx, peristomeRect.top + 0.5),
+        Offset(center.dx + sx, peristomeRect.bottom - 0.5),
+        Paint()
+          ..color = const Color(0xFFAD1457)
+          ..strokeWidth = 1.1,
+      );
+    }
+    // Veined operculum hood arching over the mouth + glistening nectar bead.
+    canvas.drawArc(
+      Rect.fromCenter(
+        center: Offset(center.dx + 2.0, cupRect.top - 3.8),
+        width: cupW * 0.95,
+        height: 7.0,
+      ),
+      math.pi,
+      math.pi,
+      true,
+      Paint()..color = const Color(0xFFCE93D8),
+    );
+    canvas.drawCircle(
+      Offset(center.dx - cupW * 0.35, cupRect.top + 3.6),
+      1.3,
+      Paint()..color = const Color(0xFFFFEA00),
+    );
   }
 
   void _renderVillager(Canvas canvas, NativeVillager v) {
@@ -2273,21 +3043,27 @@ final class JungleSurvivalGame extends FlameGame
           ),
           Paint()..color = const Color(0xFF37474F),
         );
-        // Multi-color gradient rainbow beak!
-        final beakRect = Rect.fromLTWH(a.x + dir * 5, bodyY - 6, dir * 13, 7);
-        final beakPath =
+        // Multi-color gradient rainbow beak (opens wide with acoustic rings when screaming/calling!).
+        final isScreaming =
+            a.badgeTimer > 0 &&
+            (a.activityBadge?.contains('SCREAM') == true ||
+                a.activityBadge?.contains('KREE') == true ||
+                a.activityBadge?.contains('Ate') == true);
+        final jawOpen = isScreaming ? 2.8 : 0.0;
+        final beakRect = Rect.fromLTWH(a.x + dir * 5, bodyY - 6, dir * 13, 8);
+        final upperBeak =
             Path()
-              ..moveTo(a.x + dir * 6, bodyY - 5.5)
+              ..moveTo(a.x + dir * 6, bodyY - 5.5 - jawOpen * 0.4)
               ..quadraticBezierTo(
                 a.x + dir * 17,
-                bodyY - 5.5,
+                bodyY - 5.5 - jawOpen * 0.6,
                 a.x + dir * 18,
-                bodyY + 0.5,
+                bodyY - 0.5 - jawOpen * 0.5,
               )
-              ..lineTo(a.x + dir * 6, bodyY + 1.2)
+              ..lineTo(a.x + dir * 6, bodyY - 0.2)
               ..close();
         canvas.drawPath(
-          beakPath,
+          upperBeak,
           Paint()
             ..shader = Gradient.linear(
               beakRect.topLeft,
@@ -2300,11 +3076,33 @@ final class JungleSurvivalGame extends FlameGame
               [0.0, 0.65, 1.0],
             ),
         );
+        // Lower mandible (pivots downward when screaming or holding fruit).
+        final lowerBeak =
+            Path()
+              ..moveTo(a.x + dir * 6, bodyY - 0.2)
+              ..lineTo(a.x + dir * 15.5, bodyY + 1.2 + jawOpen)
+              ..lineTo(a.x + dir * 6, bodyY + 2.2 + jawOpen * 0.5)
+              ..close();
+        canvas.drawPath(lowerBeak, Paint()..color = const Color(0xFFFF6D00));
+
+        if (isScreaming) {
+          for (int ring = 1; ring <= 2; ring++) {
+            final r = 8.0 + ((_animTime * 26.0 + ring * 6.0) % 15.0);
+            canvas.drawCircle(
+              Offset(a.x + dir * 16.0, bodyY - 1.0),
+              r,
+              Paint()
+                ..color = const Color(0x8800E5FF)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.6,
+            );
+          }
+        }
         if (a.carriedSeed != null) {
-          canvas.drawCircle(
-            Offset(a.x + dir * 14.5, bodyY + 1.8),
-            3.0,
-            Paint()..color = const Color(0xFFE91E63),
+          _drawRealisticBerryCluster(
+            canvas,
+            Offset(a.x + dir * 14.5, bodyY + 1.5),
+            scale: 0.72,
           );
         }
         canvas.drawCircle(
@@ -2970,7 +3768,13 @@ final class JungleSurvivalGame extends FlameGame
     }
   }
 
-  void _renderRainOverlay(Canvas canvas, double viewW, double viewH) {
+  void _renderRainOverlay(
+    Canvas canvas,
+    double viewW,
+    double viewH,
+    Offset cam,
+  ) {
+    const s = JungleWorld.tileSize;
     final rainPaint =
         Paint()
           ..color = const Color(0x77B3E5FC)
@@ -2979,7 +3783,58 @@ final class JungleSurvivalGame extends FlameGame
     final shift = (_animTime * 380.0) % 40.0;
     for (double x = -20; x < viewW + 20; x += 26) {
       for (double y = shift - 40; y < viewH; y += 38) {
+        final worldX = x + cam.dx;
+        final worldY = y + cam.dy;
+        final tx = JungleWorld.pixelToTile(worldX);
+        final ty = (worldY / s).floor();
+        // Never draw rain inside roofed huts, enclosed shelters, or caves!
+        if (worldState.isTileShelteredFromRain(tx, ty)) {
+          continue;
+        }
+        final endTx = JungleWorld.pixelToTile(worldX - 6);
+        final endTy = ((worldY + 15) / s).floor();
+        if (worldState.isTileShelteredFromRain(endTx, endTy)) {
+          continue;
+        }
         canvas.drawLine(Offset(x, y), Offset(x - 6, y + 15), rainPaint);
+      }
+    }
+
+    // Draw tiny raindrop splash ripples along exposed hut roofs and ground!
+    final splashPaint =
+        Paint()
+          ..color = const Color(0x99E1F5FE)
+          ..strokeWidth = 1.2
+          ..strokeCap = StrokeCap.round;
+    final startTx = (cam.dx / s).floor() - 1;
+    final endTx = ((cam.dx + viewW) / s).ceil() + 1;
+    final startTy = ((cam.dy / s).floor() - 1).clamp(1, worldState.height - 1);
+    final endTy = (((cam.dy + viewH) / s).ceil() + 1).clamp(
+      1,
+      worldState.height - 1,
+    );
+    for (int tx = startTx; tx <= endTx; tx++) {
+      for (int ty = startTy; ty <= endTy; ty++) {
+        if (worldState.getBlock(tx, ty).countsAsRoof &&
+            !worldState.isTileShelteredFromRain(tx, ty - 1)) {
+          final phase = (_animTime * 9.0 + tx * 1.7) % 1.0;
+          if (phase < 0.55) {
+            final sx = tx * s + 8.0 + ((tx * 13).abs() % 16) - cam.dx;
+            final sy = ty * s - cam.dy;
+            final spread = phase * 6.5;
+            canvas.drawLine(
+              Offset(sx, sy),
+              Offset(sx - spread, sy - 3.5 * (1.0 - phase)),
+              splashPaint,
+            );
+            canvas.drawLine(
+              Offset(sx, sy),
+              Offset(sx + spread, sy - 3.5 * (1.0 - phase)),
+              splashPaint,
+            );
+          }
+          break;
+        }
       }
     }
   }

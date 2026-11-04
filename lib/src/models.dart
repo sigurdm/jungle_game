@@ -1102,6 +1102,7 @@ final class CropPlot {
     this.isPollinated = false,
     this.isFertilized = false,
     this.effectCooldown = 0.0,
+    this.vineSegments = 0,
   }) {
     if (growthProgress < 0.0 || growthProgress > 1.0) {
       throw ArgumentError.value(
@@ -1142,6 +1143,26 @@ final class CropPlot {
   /// [ItemType.thornVineSeeds] pricking predators or [ItemType.pitcherPlantSeeds]
   /// digesting snakes).
   double effectCooldown;
+
+  /// Number of climbing or creeping vine/runner segments (`0..4`) sprouted by
+  /// this plant as it matures.
+  int vineSegments;
+
+  /// Whether this plant species naturally extends climbing tendrils and
+  /// creeping stolon vines as it grows.
+  bool get isViningSpecies =>
+      seedType == ItemType.thornVineSeeds ||
+      seedType == ItemType.berrySeeds ||
+      seedType == ItemType.pitcherPlantSeeds ||
+      seedType == ItemType.glowBulbSeeds;
+
+  /// Number of articulated stem/vine nodes visible at the current
+  /// [growthProgress] (`1..5`).
+  int get stemNodeCount =>
+      (1 + (growthProgress * 4.0).floor() + (vineSegments > 0 ? 1 : 0)).clamp(
+        1,
+        6,
+      );
 
   /// Discrete visual growth stage in `0..3` (`0` = seed, `2` = flowering, `3` = ripe).
   int get stage {

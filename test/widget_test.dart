@@ -575,6 +575,47 @@ void main() {
         expect(roarEvents, isNotEmpty);
         expect(roarEvents.first.pan, lessThan(0.0)); // Panned left of explorer
         expect(world.lastSoundEvent?.cue, SoundCue.jaguarRoar);
+
+        // 5. Verify toucan emits a stereo toucanScream when spotting a predator or fed fruit!
+        world.pendingSoundEvents.clear();
+        final toucanRight = JungleAnimal(
+          type: AnimalType.toucan,
+          x: world.playerX + 42.0,
+          y: world.playerY - 18.0,
+        )..patrolTimer = 0.0;
+        world.animals.add(toucanRight);
+        world.update(0.05);
+        final screamEvents =
+            world.pendingSoundEvents
+                .where((e) => e.cue == SoundCue.toucanScream)
+                .toList();
+        expect(screamEvents, isNotEmpty);
+        expect(screamEvents.first.pan, greaterThan(0.0));
+
+        // 6. Verify hut roofs & background walls block falling rain, and vining
+        // crops extend climbable vine tendrils up to overhead trellises.
+        final tx = world.playerTileX + 6;
+        final ty = world.playerTileY;
+        for (int y = 0; y <= ty; y++) {
+          world.blocks[y][tx] = BlockType.air;
+          world.walls[y][tx] = WallType.none;
+        }
+        world.blocks[ty + 1][tx] = BlockType.grass;
+        expect(world.isTileShelteredFromRain(tx, ty), isFalse);
+
+        // Place a thatch roof 2 tiles overhead: interior tile is now sheltered from rain!
+        world.blocks[ty - 2][tx] = BlockType.thatchRoof;
+        expect(world.isTileShelteredFromRain(tx, ty), isTrue);
+
+        // Sow a vining Berry Bush beneath the roof trellis and grow past 60%:
+        // it sprouts a climbable BlockType.vine tendril connecting to the trellis!
+        world.addItem(ItemType.berrySeeds, 2);
+        expect(world.sowSeedAt(tx, ty, ItemType.berrySeeds), isTrue);
+        final berryCrop = world.crops['$tx,$ty']!;
+        berryCrop.growthProgress = 0.65;
+        world.update(0.1);
+        expect(berryCrop.vineSegments, greaterThanOrEqualTo(2));
+        expect(world.getBlock(tx, ty - 1), BlockType.vine);
       },
     );
   });
