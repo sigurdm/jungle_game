@@ -619,18 +619,20 @@ void main() {
 
         // 7. Verify Red-Bellied Piranhas continuously swim across river lagoons
         // even when the explorer stands on the adjacent dry riverbank.
-        final piranha = world.animals.firstWhere(
+        final riverWorld = JungleWorld.generate(seed: 77);
+        final piranha = riverWorld.animals.firstWhere(
           (a) => a.type == AnimalType.piranha,
         );
         final riverLeftBankTx = (piranha.x / JungleWorld.tileSize).floor() - 4;
-        world.playerX = riverLeftBankTx * JungleWorld.tileSize;
-        world.playerY =
-            world.surfaceElevationAt(riverLeftBankTx) * JungleWorld.tileSize;
+        riverWorld.playerX = riverLeftBankTx * JungleWorld.tileSize;
+        riverWorld.playerY =
+            riverWorld.surfaceElevationAt(riverLeftBankTx) *
+            JungleWorld.tileSize;
         final startX = piranha.x;
         double totalDistanceSwum = 0.0;
         double prevX = startX;
         for (int step = 0; step < 30; step++) {
-          world.update(0.1);
+          riverWorld.update(0.1);
           totalDistanceSwum += (piranha.x - prevX).abs();
           prevX = piranha.x;
         }
