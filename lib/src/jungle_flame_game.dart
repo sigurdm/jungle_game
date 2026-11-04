@@ -3278,37 +3278,94 @@ final class JungleSurvivalGame extends FlameGame
         }
 
       case AnimalType.piranha:
-        // Red-Bellied Piranha with tail fin, metallic scales, & sharp teeth.
+        // Red-Bellied Piranha with animated tail fin, dorsal/pectoral fins,
+        // metallic scales, sharp teeth, and trailing underwater bubbles.
         final fishColor = flash ? Colors.white : const Color(0xFF546E7A);
-        final tailWag = math.sin(_animTime * 22.0) * 2.5;
+        final swimPhase = _animTime * 22.0 + a.homeX * 0.05;
+        final tailWag = math.sin(swimPhase) * 3.0;
+        final bodyBob = math.cos(swimPhase * 0.5) * 1.4;
+        final fy = a.y + bodyBob;
+
+        // Trailing underwater air bubbles behind the swimming fish.
+        for (int b = 0; b < 2; b++) {
+          final bPhase = (_animTime * 1.8 + b * 0.5 + a.homeX * 0.01) % 1.0;
+          final bx = a.x - dir * (13.0 + bPhase * 12.0);
+          final by =
+              fy - 5.0 - bPhase * 8.0 + math.sin(bPhase * math.pi * 2) * 1.5;
+          canvas.drawCircle(
+            Offset(bx, by),
+            1.6 * (1.0 - bPhase * 0.4),
+            Paint()
+              ..color = Colors.lightBlueAccent.withValues(
+                alpha: (1.0 - bPhase) * 0.55,
+              )
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 0.9,
+          );
+        }
+
+        // Forked caudal tail fin.
         final tailPath =
             Path()
-              ..moveTo(a.x - dir * 8, a.y - 5)
-              ..lineTo(a.x - dir * 14, a.y - 10 + tailWag)
-              ..lineTo(a.x - dir * 14, a.y + tailWag)
+              ..moveTo(a.x - dir * 8, fy - 5)
+              ..lineTo(a.x - dir * 15, fy - 11 + tailWag)
+              ..lineTo(a.x - dir * 12, fy - 5 + tailWag * 0.5)
+              ..lineTo(a.x - dir * 15, fy + 1 + tailWag)
               ..close();
         canvas.drawPath(tailPath, Paint()..color = const Color(0xFF37474F));
+
+        // Dorsal fin.
+        final dorsalPath =
+            Path()
+              ..moveTo(a.x - dir * 3, fy - 10)
+              ..lineTo(a.x - dir * 6, fy - 15 - tailWag * 0.25)
+              ..lineTo(a.x + dir * 2, fy - 10.5)
+              ..close();
+        canvas.drawPath(dorsalPath, Paint()..color = const Color(0xFF455A64));
+
+        // Main body & crimson-orange belly.
         canvas.drawOval(
-          Rect.fromLTWH(a.x - 10, a.y - 11, 20, 12),
+          Rect.fromLTWH(a.x - 10, fy - 11, 20, 12),
           Paint()..color = fishColor,
         );
         canvas.drawArc(
-          Rect.fromLTWH(a.x - 9, a.y - 9, 18, 9),
+          Rect.fromLTWH(a.x - 9, fy - 9, 18, 9),
           0,
           math.pi,
           true,
           Paint()..color = const Color(0xFFE53935),
         );
+
+        // Fluttering pectoral fin.
+        final pecY = fy - 4.0 + math.sin(swimPhase + 1.2) * 1.5;
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(a.x - dir * 1.5, pecY),
+            width: 5.5,
+            height: 2.8,
+          ),
+          Paint()..color = const Color(0xCCFF7043),
+        );
+
+        // Fierce golden eye & lower jaw teeth.
         canvas.drawCircle(
-          Offset(a.x + dir * 5, a.y - 6.5),
-          1.8,
+          Offset(a.x + dir * 5, fy - 6.5),
+          1.9,
           Paint()..color = Colors.yellowAccent,
         );
         canvas.drawCircle(
-          Offset(a.x + dir * 5.4, a.y - 6.5),
-          0.8,
+          Offset(a.x + dir * 5.5, fy - 6.5),
+          0.85,
           Paint()..color = Colors.black,
         );
+        for (int t = 0; t < 3; t++) {
+          final tx = a.x + dir * (4.2 + t * 1.6);
+          canvas.drawCircle(
+            Offset(tx, fy - 2.8),
+            0.75,
+            Paint()..color = const Color(0xFFFFFDE7),
+          );
+        }
     }
 
     if (a.health < a.type.maxHealth) {

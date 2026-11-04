@@ -975,14 +975,26 @@ final class JungleWorld {
     List<int> surfaceY,
     math.Random chunkRng,
   ) {
-    // Spawn piranha patrolling the river basin.
-    animals.add(
+    // Spawn a pair of piranhas actively patrolling the river basin in opposite
+    // directions and at different depths.
+    animals.addAll([
       JungleAnimal(
         type: AnimalType.piranha,
-        x: (chunkStart + 8) * tileSize,
-        y: (waterLevel + 1) * tileSize,
-      ),
-    );
+        x: (chunkStart + 5) * tileSize + tileSize * 0.5,
+        y: (waterLevel + 1) * tileSize + 8.0,
+        facingRight: true,
+        homeX: (chunkStart + 5) * tileSize,
+        homeY: (waterLevel + 1) * tileSize + 8.0,
+      )..patrolTimer = 4.5,
+      JungleAnimal(
+        type: AnimalType.piranha,
+        x: (chunkStart + 10) * tileSize + tileSize * 0.5,
+        y: (waterLevel + 2) * tileSize + 6.0,
+        facingRight: false,
+        homeX: (chunkStart + 10) * tileSize,
+        homeY: (waterLevel + 2) * tileSize + 6.0,
+      )..patrolTimer = 5.5,
+    ]);
 
     // Plant riverside glow-bulbs or pitcher plants on the banks.
     for (final bankOffset in const [1, 14]) {
@@ -3283,7 +3295,15 @@ final class JungleWorld {
         continue;
       }
 
-      // 4. Hostile Predators (Jaguar, Emerald Viper, Red-Bellied Piranha):
+      // 4. Aquatic Red-Bellied Piranha AI: swims back and forth across river
+      // lagoons with vertical depth undulation, and darts after the explorer
+      // when they step/swim into the water!
+      if (a.type == AnimalType.piranha) {
+        _updatePiranha(a, dt, playerInWater: playerInWater);
+        continue;
+      }
+
+      // 5. Land Predators (Shadow Jaguar & Emerald Viper):
       final dxToPlayer = playerX - a.x;
       final dyToPlayer = playerY - a.y;
       final distToPlayer = math.sqrt(
@@ -3313,16 +3333,8 @@ final class JungleWorld {
         }
       }
 
-      // Piranha calming near riverside Bioluminescent Glow-Bulbs.
-      final piranhaCalmed =
-          a.type == AnimalType.piranha &&
-          _hasGlowBulbNearWater(
-            pixelToTile(a.x),
-            pixelToTile(a.y).clamp(0, height - 1),
-          );
-
       final aggroRange = isNight ? 240.0 : 165.0;
-      if (!snakeOverride && !piranhaCalmed && distToPlayer < aggroRange) {
+      if (!snakeOverride && distToPlayer < aggroRange) {
         a.facingRight = dxToPlayer >= 0;
         a.vx = (dxToPlayer >= 0 ? 1.0 : -1.0) * a.type.speed;
         // Emit a predator roar / hiss when lunging into pursuit!
@@ -3345,10 +3357,7 @@ final class JungleWorld {
 
       _moveLandOrAquaticAnimal(a, dt);
 
-      if (!piranhaCalmed &&
-          !snakeOverride &&
-          distToPlayer < 24.0 &&
-          a.attackCooldown <= 0) {
+      if (!snakeOverride && distToPlayer < 24.0 && a.attackCooldown <= 0) {
         final midTx = pixelToTile((a.x + playerX) * 0.5);
         final midTy = pixelToTile(
           (a.y + playerY - 16.0) * 0.5,
@@ -3371,13 +3380,6 @@ final class JungleWorld {
             a.showBadge('🐍 HISS!', duration: 1.5);
             emitSound(
               SoundCue.snakeHiss,
-              worldX: a.x,
-              worldY: a.y,
-              baseVolume: 0.95,
-            );
-          } else if (a.type == AnimalType.piranha) {
-            emitSound(
-              SoundCue.piranhaSplash,
               worldX: a.x,
               worldY: a.y,
               baseVolume: 0.95,
@@ -3844,6 +3846,135 @@ final class JungleWorld {
     }
 
     _moveLandOrAquaticAnimal(a, dt);
+  }
+
+  void _updatePiranha(
+    JungleAnimal a,
+    double dt, {
+    required bool playerInWater,
+  }) {
+    // Ensure the piranha stays inside a water block; if displaced onto a bank,
+    // relocate it to the nearest water tile in the lagoon.
+    final curTx = pixelToTile(a.x);
+    final curTy = pixelToTile(a.y - 6.0).clamp(0, height - 1);
+    if (getBlock(curTx, curTy) != BlockType.water) {
+      bool relocated = false;
+      for (int r = 1; r <= 3 && !relocated; r++) {
+        for (int dy = -r; dy <= r && !relocated; dy++) {
+          for (int dx = -r; dx <= r && !relocated; dx++) {
+            final nx = curTx + dx;
+            final ny = (curTy + dy).clamp(0, height - 1);
+            if (getBlock(nx, ny) == BlockType.water) {
+              a.x = nx * tileSize + tileSize * 0.5;
+              a.y = ny * tileSize + tileSize * 0.5;
+              relocated = true;
+            }
+          }
+        }
+      }
+      if (!relocated) return;
+    }
+
+    final calmed = _hasGlowBulbNearWater(curTx, curTy);
+    if (calmed) {
+      a.showBadge('💡 Calmed', duration: 1.5);
+      milestonePlantAnimalInteraction = true;
+    }
+
+    final dxToPlayer = playerX - a.x;
+    final dyToPlayer = (playerY - 12.0) - (a.y - 6.0);
+    final distToPlayer = math.sqrt(
+      dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer,
+    );
+    final aggroRange = isNight ? 240.0 : 175.0;
+
+    // Only dart toward the explorer when the explorer is actually in the water!
+    // When the explorer is on dry land, piranhas continuously patrol back and
+    // forth across the full width of the river lagoon without getting pinned
+    // against the riverbank.
+    if (playerInWater && !calmed && distToPlayer < aggroRange) {
+      if (dxToPlayer.abs() > 6.0) {
+        a.facingRight = dxToPlayer >= 0;
+      }
+      a.vx = (a.facingRight ? 1.15 : -1.15) * a.type.speed;
+      a.vy = (dyToPlayer * 2.2).clamp(-65.0, 65.0);
+      if (a.interactionTimer <= 0) {
+        a.interactionTimer = 2.8 + _rng.nextDouble() * 1.5;
+        a.showBadge('🐟 SNAP!', duration: 1.1);
+        emitSound(
+          SoundCue.piranhaSplash,
+          worldX: a.x,
+          worldY: a.y,
+          baseVolume: 0.75,
+        );
+      }
+    } else {
+      if (a.patrolTimer <= 0) {
+        a.facingRight = !a.facingRight;
+        a.patrolTimer = 4.5 + _rng.nextDouble() * 3.0;
+      }
+      final swimFactor = calmed ? 0.75 : 0.92;
+      a.vx = (a.facingRight ? swimFactor : -swimFactor) * a.type.speed;
+      final wavePhase = timeOfDay * 75.0 + a.homeX * 0.05;
+      a.vy = math.sin(wavePhase) * 22.0;
+    }
+
+    // Advance horizontally through water, following sloped riverbed contours
+    // and reversing cleanly only when reaching a solid riverbank.
+    final nextX = a.x + a.vx * dt;
+    final lookAheadX = nextX + (a.facingRight ? 10.0 : -10.0);
+    final frontTx = pixelToTile(lookAheadX);
+    final swimTy = pixelToTile(a.y - 6.0).clamp(0, height - 1);
+
+    if (getBlock(frontTx, swimTy) == BlockType.water) {
+      a.x = nextX;
+    } else if (swimTy + 1 < height &&
+        getBlock(frontTx, swimTy + 1) == BlockType.water) {
+      a.x = nextX;
+      a.y += 42.0 * dt;
+    } else if (swimTy - 1 >= 0 &&
+        getBlock(frontTx, swimTy - 1) == BlockType.water) {
+      a.x = nextX;
+      a.y -= 42.0 * dt;
+    } else {
+      a.facingRight = !a.facingRight;
+      a.vx = -a.vx;
+      a.patrolTimer = 4.5 + _rng.nextDouble() * 3.0;
+    }
+
+    // Apply vertical swimming undulation within the water column.
+    final nextY = a.y + a.vy * dt;
+    final checkTx = pixelToTile(a.x);
+    final nextTy = pixelToTile(nextY - 6.0).clamp(0, height - 1);
+    final upperTy = pixelToTile(nextY - 12.0).clamp(0, height - 1);
+    final lowerTy = pixelToTile(nextY + 1.0).clamp(0, height - 1);
+    if (getBlock(checkTx, nextTy) == BlockType.water &&
+        getBlock(checkTx, upperTy) == BlockType.water &&
+        !getBlock(checkTx, lowerTy).isSolid) {
+      a.y = nextY;
+    }
+
+    // Contact bite when explorer is in the water within striking range.
+    if (playerInWater &&
+        !calmed &&
+        distToPlayer < 24.0 &&
+        a.attackCooldown <= 0) {
+      a.attackCooldown = 1.35;
+      health = (health - a.type.contactDamage).clamp(0.0, 100.0);
+      playerHurtFlashTimer = 0.35;
+      playerVx = (playerX >= a.x ? 1 : -1) * 175.0;
+      playerVy = -130.0;
+      a.showBadge('🐟 SNAP!', duration: 1.4);
+      emitSound(
+        SoundCue.piranhaSplash,
+        worldX: a.x,
+        worldY: a.y,
+        baseVolume: 0.90,
+      );
+      setBanner(
+        '⚠️ Bitten by ${a.type.label} (-${a.type.contactDamage.round()} HP)! Plant 💡 Glow-Bulbs on the riverbank to calm piranhas!',
+      );
+    }
   }
 
   void _moveLandOrAquaticAnimal(JungleAnimal a, double dt) {

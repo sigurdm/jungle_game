@@ -616,6 +616,25 @@ void main() {
         world.update(0.1);
         expect(berryCrop.vineSegments, greaterThanOrEqualTo(2));
         expect(world.getBlock(tx, ty - 1), BlockType.vine);
+
+        // 7. Verify Red-Bellied Piranhas continuously swim across river lagoons
+        // even when the explorer stands on the adjacent dry riverbank.
+        final piranha = world.animals.firstWhere(
+          (a) => a.type == AnimalType.piranha,
+        );
+        final riverLeftBankTx = (piranha.x / JungleWorld.tileSize).floor() - 4;
+        world.playerX = riverLeftBankTx * JungleWorld.tileSize;
+        world.playerY =
+            world.surfaceElevationAt(riverLeftBankTx) * JungleWorld.tileSize;
+        final startX = piranha.x;
+        double totalDistanceSwum = 0.0;
+        double prevX = startX;
+        for (int step = 0; step < 30; step++) {
+          world.update(0.1);
+          totalDistanceSwum += (piranha.x - prevX).abs();
+          prevX = piranha.x;
+        }
+        expect(totalDistanceSwum, greaterThan(120.0));
       },
     );
   });
