@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show KeyEvent, KeyEventResult;
 
 import 'models.dart';
+import 'sound_synthesizer.dart';
 import 'world_state.dart';
 
 /// Action mode used when tapping or dragging on world tiles.
@@ -31,17 +32,21 @@ enum InteractionMode {
 /// Flame 2D side-scrolling block survival game engine.
 ///
 /// Renders the world, physics effects (falling water, spreading wildfire),
-/// beehives, and multi-layered character graphics procedurally on a [Canvas].
+/// beehives, 8 distinct botanical crop varieties, and multi-layered character
+/// and wildlife graphics procedurally on a [Canvas].
 final class JungleSurvivalGame extends FlameGame
     with TapCallbacks, DragCallbacks, KeyboardEvents {
   /// Creates a [JungleSurvivalGame] backed by [worldState].
   JungleSurvivalGame({required this.worldState, required this.onHudChanged});
 
   /// Underlying simulation state for the jungle world.
-  final JungleWorld worldState;
+  JungleWorld worldState;
 
   /// Callback invoked periodically to refresh the Flutter HUD overlay.
   final VoidCallback onHudChanged;
+
+  /// Procedural soundscape synthesizer and Web Audio controller.
+  final JungleSoundscape soundscape = JungleSoundscape();
 
   /// Current tile interaction mode for taps and drags.
   InteractionMode interactionMode = InteractionMode.smartAuto;
@@ -64,19 +69,15 @@ final class JungleSurvivalGame extends FlameGame
   double _hudNotifyAccumulator = 0.0;
   double _animTime = 0.0;
 
-  /// Current camera top-left offset in world pixels.
+  /// Current camera top-left offset in world pixels (horizontally unbounded).
   Offset get cameraTopLeft {
     final viewW = size.x > 0 ? size.x : 800.0;
     final viewH = size.y > 0 ? size.y : 500.0;
-    final maxCamX = math.max(
-      0.0,
-      worldState.width * JungleWorld.tileSize - viewW,
-    );
     final maxCamY = math.max(
       0.0,
       worldState.height * JungleWorld.tileSize - viewH,
     );
-    final cx = (worldState.playerX - viewW * 0.5).clamp(0.0, maxCamX);
+    final cx = worldState.playerX - viewW * 0.5;
     final cy = (worldState.playerY - viewH * 0.54).clamp(0.0, maxCamY);
     return Offset(cx, cy);
   }
@@ -86,8 +87,8 @@ final class JungleSurvivalGame extends FlameGame
     final cam = cameraTopLeft;
     final wx = cam.dx + screenPoint.dx;
     final wy = cam.dy + screenPoint.dy;
-    final tx = (wx ~/ JungleWorld.tileSize).clamp(0, worldState.width - 1);
-    final ty = (wy ~/ JungleWorld.tileSize).clamp(0, worldState.height - 1);
+    final tx = JungleWorld.pixelToTile(wx);
+    final ty = JungleWorld.pixelToTile(wy).clamp(0, worldState.height - 1);
     return (tx, ty);
   }
 
@@ -101,9 +102,13 @@ final class JungleSurvivalGame extends FlameGame
       ..addAll(keysPressed);
 
     if (event is KeyDownEvent) {
+      soundscape.unlockAudio();
       final key = event.logicalKey;
       if (key == LogicalKeyboardKey.keyE) {
         worldState.eatFood();
+        onHudChanged();
+      } else if (key == LogicalKeyboardKey.keyR) {
+        worldState.cycleEquippedSeed();
         onHudChanged();
       } else if (key == LogicalKeyboardKey.keyF) {
         worldState.toggleFishingCast();
@@ -148,6 +153,7 @@ final class JungleSurvivalGame extends FlameGame
 
   @override
   void onTapDown(TapDownEvent event) {
+    soundscape.unlockAudio();
     final pos = Offset(event.localPosition.x, event.localPosition.y);
     _pointerScreenPos = pos;
     _pointerHeld = true;
@@ -160,10 +166,18 @@ final class JungleSurvivalGame extends FlameGame
       final d = math.sqrt(
         math.pow(a.x - worldTapX, 2) + math.pow(a.y - worldTapY, 2),
       );
-      if (d <= 36.0 && (a.type != AnimalType.beeSwarm || a.isAngry)) {
-        worldState.attackNearbyAnimals();
-        onHudChanged();
-        return;
+      if (d <= 36.0) {
+        if (a.type == AnimalType.capuchinMonkey ||
+            a.type == AnimalType.toucan) {
+          worldState.feedNearbyWildlife(a);
+          onHudChanged();
+          return;
+        }
+        if (a.type.hostileByDefault || a.isAngry) {
+          worldState.attackNearbyAnimals();
+          onHudChanged();
+          return;
+        }
       }
     }
 
@@ -223,8 +237,12 @@ final class JungleSurvivalGame extends FlameGame
       onHudChanged();
       return;
     }
+    if (worldState.feedNearbyWildlife()) {
+      onHudChanged();
+      return;
+    }
     final dir = worldState.playerFacingRight ? 1 : -1;
-    final tx = (worldState.playerTileX + dir).clamp(0, worldState.width - 1);
+    final tx = worldState.playerTileX + dir;
     final ty = worldState.playerTileY;
     if (!worldState.interactOrPlaceAt(tx, ty)) {
       worldState.mineTileStep(tx, ty, 0.22);
@@ -257,6 +275,20 @@ final class JungleSurvivalGame extends FlameGame
       moveRight: inputRight || kbRight,
       jumpOrSwimUp: inputJump || kbJump,
       climbDown: inputDown || kbDown,
+    );
+
+    if (worldState.pendingSoundEvents.isNotEmpty) {
+      for (final event in worldState.pendingSoundEvents) {
+        soundscape.playEvent(event, soundEnabled: worldState.soundEnabled);
+      }
+      worldState.pendingSoundEvents.clear();
+    }
+    soundscape.updateAmbientBeeBuzz(
+      dt,
+      soundEnabled: worldState.soundEnabled,
+      intensity: worldState.beeBuzzIntensity,
+      isAngry: worldState.beeBuzzAngry,
+      pan: worldState.beeBuzzPan,
     );
 
     if (_pointerHeld && _pointerScreenPos != null) {
@@ -295,19 +327,13 @@ final class JungleSurvivalGame extends FlameGame
     canvas.save();
     canvas.translate(-cam.dx, -cam.dy);
 
-    final startTx = (cam.dx ~/ JungleWorld.tileSize - 1).clamp(
-      0,
-      worldState.width - 1,
-    );
-    final endTx = ((cam.dx + viewW) ~/ JungleWorld.tileSize + 2).clamp(
-      0,
-      worldState.width - 1,
-    );
-    final startTy = (cam.dy ~/ JungleWorld.tileSize - 1).clamp(
+    final startTx = JungleWorld.pixelToTile(cam.dx) - 1;
+    final endTx = JungleWorld.pixelToTile(cam.dx + viewW) + 2;
+    final startTy = (JungleWorld.pixelToTile(cam.dy) - 1).clamp(
       0,
       worldState.height - 1,
     );
-    final endTy = ((cam.dy + viewH) ~/ JungleWorld.tileSize + 2).clamp(
+    final endTy = (JungleWorld.pixelToTile(cam.dy + viewH) + 2).clamp(
       0,
       worldState.height - 1,
     );
@@ -404,7 +430,7 @@ final class JungleSurvivalGame extends FlameGame
 
     canvas.restore();
 
-    // 9. Render rain droplets & night ambient darkness with warm campfire glow.
+    // 9. Render rain droplets & night ambient darkness with warm campfire/glow-bulb glow.
     if (worldState.isRaining) {
       _renderRainOverlay(canvas, viewW, viewH);
     }
@@ -481,7 +507,6 @@ final class JungleSurvivalGame extends FlameGame
       case BlockType.grass:
         canvas.drawRect(rect, Paint()..color = BlockType.dirt.primaryColor);
         canvas.drawRect(Rect.fromLTWH(left, top, s, 8.0), fill);
-        // Individual grass blades along top edge.
         for (double gx = 3; gx < s - 3; gx += 6) {
           canvas.drawLine(
             Offset(left + gx, top + 2),
@@ -496,6 +521,54 @@ final class JungleSurvivalGame extends FlameGame
         for (double dx = 4; dx < s; dx += 8) {
           canvas.drawRect(Rect.fromLTWH(left + dx, top + 2, 4, 5), accent);
         }
+      case BlockType.riverSilt:
+        canvas.drawRect(rect, fill);
+        // Alluvial mineral waves and glistening wet silt band at top.
+        canvas.drawRect(
+          Rect.fromLTWH(left, top, s, 6.0),
+          Paint()..color = const Color(0xFF00838F),
+        );
+        for (double dx = 4; dx < s - 4; dx += 9) {
+          canvas.drawOval(
+            Rect.fromLTWH(left + dx, top + 10 + (dx.toInt() % 2) * 7, 6, 3.5),
+            accent,
+          );
+        }
+      case BlockType.peatBog:
+        canvas.drawRect(rect, fill);
+        // Spongy mossy carpet and damp organic pockets.
+        canvas.drawRect(Rect.fromLTWH(left, top, s, 7.0), accent);
+        for (double gx = 4; gx < s - 4; gx += 7) {
+          canvas.drawCircle(
+            Offset(left + gx, top + 2.5),
+            2.4,
+            Paint()..color = const Color(0xFF9CCC65),
+          );
+        }
+        canvas.drawCircle(
+          Offset(left + 11, top + 16),
+          3.2,
+          Paint()..color = const Color(0xFF311B30),
+        );
+        canvas.drawCircle(
+          Offset(left + 22, top + 22),
+          2.8,
+          Paint()..color = const Color(0xFF311B30),
+        );
+      case BlockType.volcanicAsh:
+        canvas.drawRect(rect, fill);
+        // Dark basalt crust with warm mineral/ember flecks.
+        canvas.drawRect(
+          Rect.fromLTWH(left, top, s, 5.5),
+          Paint()..color = const Color(0xFF455A64),
+        );
+        canvas.drawCircle(Offset(left + 8, top + 12), 2.2, accent);
+        canvas.drawCircle(Offset(left + 21, top + 16), 2.5, accent);
+        canvas.drawCircle(
+          Offset(left + 14, top + 24),
+          1.8,
+          Paint()..color = const Color(0xFFFFCA28),
+        );
       case BlockType.coalOre:
       case BlockType.ironOre:
         canvas.drawRect(rect, fill);
@@ -523,7 +596,6 @@ final class JungleSurvivalGame extends FlameGame
         canvas.drawCircle(Offset(left + 20, top + 18), 3.4, accent);
         canvas.drawCircle(Offset(left + 15, top + 23), 3.4, accent);
       case BlockType.beehive:
-        // Tiered golden honeycomb hive with entrance hole & dripping honey!
         final hiveRect = Rect.fromLTWH(left + 4, top + 3, s - 8, s - 6);
         canvas.drawOval(hiveRect, fill);
         final ribPaint =
@@ -538,13 +610,11 @@ final class JungleSurvivalGame extends FlameGame
             ribPaint,
           );
         }
-        // Dark hive entrance hole.
         canvas.drawCircle(
           Offset(left + s * 0.5, top + 18),
           3.8,
           Paint()..color = const Color(0xFF3E2723),
         );
-        // Animated golden honey drop dripping from the bottom of the hive.
         final dropOffset = (_animTime * 9.0 + tx * 2.0) % 7.0;
         canvas.drawCircle(
           Offset(left + s * 0.5 + 4, top + s - 3 + dropOffset),
@@ -552,7 +622,6 @@ final class JungleSurvivalGame extends FlameGame
           Paint()..color = const Color(0xFFFFD54F),
         );
       case BlockType.wildfire:
-        // Roaring spreading wildfire with multi-layered flame tongues & embers.
         final f1 = math.sin(_animTime * 16.0 + tx) * 4.0;
         final f2 = math.cos(_animTime * 20.0 + ty) * 3.5;
         final outerFlame =
@@ -571,7 +640,6 @@ final class JungleSurvivalGame extends FlameGame
               ..lineTo(left + 24, top + s)
               ..close();
         canvas.drawPath(innerFlame, accent);
-        // Rising smoke & spark ember.
         final emberY = top + 4 - ((_animTime * 28.0 + tx * 7) % 14.0);
         canvas.drawCircle(
           Offset(left + 16 + f1, emberY),
@@ -592,7 +660,6 @@ final class JungleSurvivalGame extends FlameGame
           accent,
         );
         if (isFalling) {
-          // Waterfall foam streaks when water falls with gravity.
           canvas.drawLine(
             Offset(left + 10, top + 2),
             Offset(left + 10, top + s - 2),
@@ -653,48 +720,331 @@ final class JungleSurvivalGame extends FlameGame
     const s = JungleWorld.tileSize;
     final cx = crop.tileX * s + s * 0.5;
     final bottomY = (crop.tileY + 1) * s;
-    final stemHeight = 7.0 + crop.growthProgress * 20.0;
+    final sway = math.sin(_animTime * 2.8 + crop.tileX) * 1.8;
+    final stemHeight = 6.0 + crop.growthProgress * 20.0;
+
+    // 1. Fertilized soil nutrient shimmer or habitat thriving/struggling aura at the base.
+    if (crop.isFertilized) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(cx, bottomY - 1.5),
+          width: 22.0,
+          height: 4.5,
+        ),
+        Paint()..color = const Color(0x88FFD54F),
+      );
+    }
+    if (crop.lastHabitatMultiplier >= 1.35) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(cx, bottomY - 2.0),
+          width: 24.0,
+          height: 5.0,
+        ),
+        Paint()..color = const Color(0x6600E676),
+      );
+    } else if (crop.lastHabitatMultiplier <= 0.70) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(cx, bottomY - 2.0),
+          width: 20.0,
+          height: 4.0,
+        ),
+        Paint()..color = const Color(0x66FF7043),
+      );
+    }
+
+    // 2. Pollinated golden pollen sparkles floating around the plant.
+    if (crop.isPollinated) {
+      for (int i = 0; i < 3; i++) {
+        final angle = _animTime * 3.5 + i * 2.1;
+        final px = cx + math.cos(angle) * 9.0;
+        final py = bottomY - stemHeight * 0.65 + math.sin(angle * 1.4) * 5.0;
+        canvas.drawCircle(
+          Offset(px, py),
+          1.8,
+          Paint()..color = const Color(0xFFFFEA00),
+        );
+      }
+    }
+
     final stemPaint =
         Paint()
           ..color = const Color(0xFF66BB6A)
-          ..strokeWidth = 3.0;
-    canvas.drawLine(
-      Offset(cx, bottomY),
-      Offset(cx, bottomY - stemHeight),
-      stemPaint,
-    );
-    if (crop.stage >= 1) {
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(cx - 5, bottomY - stemHeight * 0.6),
-          width: 8,
-          height: 5,
-        ),
-        stemPaint,
-      );
-    }
-    if (crop.isMature) {
-      final fruitColor = switch (crop.seedType) {
-        ItemType.bananaSeeds => const Color(0xFFFFEE58),
-        ItemType.mangoSeeds => const Color(0xFFFFA726),
-        _ => const Color(0xFFEF5350),
-      };
-      canvas.drawCircle(
-        Offset(cx, bottomY - stemHeight - 3),
-        5.5,
-        Paint()..color = fruitColor,
-      );
+          ..strokeWidth = 3.0
+          ..strokeCap = StrokeCap.round;
+
+    switch (crop.seedType) {
+      case ItemType.berrySeeds:
+        canvas.drawLine(
+          Offset(cx, bottomY),
+          Offset(cx + sway * 0.5, bottomY - stemHeight),
+          stemPaint,
+        );
+        if (crop.stage >= 1) {
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(cx, bottomY - stemHeight * 0.65),
+              width: 14.0 + crop.growthProgress * 6.0,
+              height: 10.0 + crop.growthProgress * 4.0,
+            ),
+            Paint()..color = const Color(0xFF2E7D32),
+          );
+        }
+        if (crop.stage == 2) {
+          // White berry blossoms.
+          canvas.drawCircle(
+            Offset(cx - 4, bottomY - stemHeight * 0.7),
+            2.2,
+            Paint()..color = Colors.white,
+          );
+          canvas.drawCircle(
+            Offset(cx + 4, bottomY - stemHeight * 0.6),
+            2.2,
+            Paint()..color = Colors.white,
+          );
+        } else if (crop.isMature) {
+          final berryPaint = Paint()..color = const Color(0xFFE53935);
+          canvas.drawCircle(
+            Offset(cx - 4, bottomY - stemHeight * 0.75),
+            3.2,
+            berryPaint,
+          );
+          canvas.drawCircle(
+            Offset(cx + 4, bottomY - stemHeight * 0.65),
+            3.2,
+            berryPaint,
+          );
+          canvas.drawCircle(
+            Offset(cx, bottomY - stemHeight * 0.45),
+            3.2,
+            berryPaint,
+          );
+        }
+
+      case ItemType.bananaSeeds:
+        // Sturdy pseudo-stem and broad arching tropical palm fronds.
+        canvas.drawLine(
+          Offset(cx, bottomY),
+          Offset(cx + sway * 0.4, bottomY - stemHeight),
+          Paint()
+            ..color = const Color(0xFF558B2F)
+            ..strokeWidth = 4.2,
+        );
+        if (crop.stage >= 1) {
+          final frondPaint = Paint()..color = const Color(0xFF7CB342);
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(cx - 7, bottomY - stemHeight + 2),
+              width: 13,
+              height: 5,
+            ),
+            frondPaint,
+          );
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(cx + 7, bottomY - stemHeight + 2),
+              width: 13,
+              height: 5,
+            ),
+            frondPaint,
+          );
+        }
+        if (crop.isMature) {
+          final bananaPaint = Paint()..color = const Color(0xFFFFEE58);
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(cx - 3, bottomY - stemHeight * 0.65),
+              width: 5,
+              height: 8,
+            ),
+            bananaPaint,
+          );
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(cx + 2, bottomY - stemHeight * 0.65),
+              width: 5,
+              height: 8,
+            ),
+            bananaPaint,
+          );
+        }
+
+      case ItemType.mangoSeeds:
+        canvas.drawLine(
+          Offset(cx, bottomY),
+          Offset(cx, bottomY - stemHeight),
+          Paint()
+            ..color = const Color(0xFF6D4C41)
+            ..strokeWidth = 3.5,
+        );
+        if (crop.stage >= 1) {
+          canvas.drawCircle(
+            Offset(cx + sway * 0.4, bottomY - stemHeight),
+            7.0 + crop.growthProgress * 4.0,
+            Paint()..color = const Color(0xFF388E3C),
+          );
+        }
+        if (crop.isMature) {
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(cx - 3, bottomY - stemHeight + 2),
+              width: 6.5,
+              height: 8.0,
+            ),
+            Paint()..color = const Color(0xFFFFA726),
+          );
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(cx + 4, bottomY - stemHeight + 3),
+              width: 6.5,
+              height: 8.0,
+            ),
+            Paint()..color = const Color(0xFFFFCA28),
+          );
+        }
+
+      case ItemType.healingHerbSeeds:
+        // Aromatic aloe/herb rosette with mint snake-repelling scent aura!
+        if (crop.stage >= 1) {
+          canvas.drawCircle(
+            Offset(cx, bottomY - 10),
+            12.0 + math.sin(_animTime * 4.0) * 2.0,
+            Paint()..color = const Color(0x2800E676),
+          );
+        }
+        final bladePaint =
+            Paint()
+              ..color = const Color(0xFF00C853)
+              ..strokeWidth = 3.0
+              ..strokeCap = StrokeCap.round;
+        for (final angle in const [-0.55, -0.25, 0.0, 0.25, 0.55]) {
+          final bx = cx + math.sin(angle) * stemHeight * 0.7;
+          final by = bottomY - math.cos(angle) * stemHeight * 0.85;
+          canvas.drawLine(Offset(cx, bottomY), Offset(bx, by), bladePaint);
+        }
+        if (crop.isMature) {
+          canvas.drawCircle(
+            Offset(cx, bottomY - stemHeight * 0.9),
+            4.0,
+            Paint()..color = const Color(0xFFB9F6CA),
+          );
+        }
+
+      case ItemType.glowBulbSeeds:
+        // Bioluminescent lotus stem & glowing cyan-lime bulb!
+        final glowRadius =
+            8.0 + crop.growthProgress * 10.0 + math.sin(_animTime * 5.0) * 2.0;
+        canvas.drawCircle(
+          Offset(cx + sway * 0.5, bottomY - stemHeight),
+          glowRadius,
+          Paint()..color = const Color(0x4400E5FF),
+        );
+        canvas.drawLine(
+          Offset(cx, bottomY),
+          Offset(cx + sway * 0.5, bottomY - stemHeight),
+          Paint()
+            ..color = const Color(0xFF26A69A)
+            ..strokeWidth = 2.8,
+        );
+        canvas.drawCircle(
+          Offset(cx + sway * 0.5, bottomY - stemHeight),
+          3.5 + crop.growthProgress * 3.5,
+          Paint()
+            ..color =
+                crop.isMature
+                    ? const Color(0xFF76FF03)
+                    : const Color(0xFF00E5FF),
+        );
+
+      case ItemType.thornVineSeeds:
+        // Spiky defensive briar hedge with crimson thorns.
+        final briarPaint =
+            Paint()
+              ..color = const Color(0xFF33691E)
+              ..strokeWidth = 2.8;
+        canvas.drawLine(
+          Offset(cx - 6, bottomY),
+          Offset(cx + 4 + sway, bottomY - stemHeight),
+          briarPaint,
+        );
+        canvas.drawLine(
+          Offset(cx + 6, bottomY),
+          Offset(cx - 4 + sway, bottomY - stemHeight),
+          briarPaint,
+        );
+        final thornPaint = Paint()..color = const Color(0xFFD50000);
+        for (double h = 5; h <= stemHeight; h += 6) {
+          canvas.drawCircle(Offset(cx - 5, bottomY - h), 2.0, thornPaint);
+          canvas.drawCircle(Offset(cx + 5, bottomY - h), 2.0, thornPaint);
+        }
+
+      case ItemType.pitcherPlantSeeds:
+        // Carnivorous jungle pitcher cup with hanging lid and alluring nectar.
+        canvas.drawLine(
+          Offset(cx, bottomY),
+          Offset(cx, bottomY - stemHeight * 0.6),
+          stemPaint,
+        );
+        if (crop.stage >= 1) {
+          final cupRect = Rect.fromCenter(
+            center: Offset(cx + sway * 0.5, bottomY - stemHeight * 0.65),
+            width: 10.0 + crop.growthProgress * 4.0,
+            height: 12.0 + crop.growthProgress * 6.0,
+          );
+          canvas.drawOval(cupRect, Paint()..color = const Color(0xFF8E24AA));
+          // Striped peristome rim.
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(cupRect.center.dx, cupRect.top + 2),
+              width: cupRect.width + 2,
+              height: 4.0,
+            ),
+            Paint()..color = const Color(0xFFC6FF00),
+          );
+          // Pitcher hood/lid.
+          canvas.drawArc(
+            Rect.fromCenter(
+              center: Offset(cupRect.center.dx + 2, cupRect.top - 3),
+              width: 10,
+              height: 6,
+            ),
+            math.pi,
+            math.pi,
+            true,
+            Paint()..color = const Color(0xFFAB47BC),
+          );
+        }
+
+      case ItemType.mahoganySapling:
+        canvas.drawLine(
+          Offset(cx, bottomY),
+          Offset(cx, bottomY - stemHeight),
+          Paint()
+            ..color = const Color(0xFF5D4037)
+            ..strokeWidth = 4.0,
+        );
+        canvas.drawCircle(
+          Offset(cx, bottomY - stemHeight),
+          6.0 + crop.growthProgress * 6.0,
+          Paint()..color = const Color(0xFF1B5E20),
+        );
+
+      default:
+        canvas.drawLine(
+          Offset(cx, bottomY),
+          Offset(cx, bottomY - stemHeight),
+          stemPaint,
+        );
     }
   }
 
   void _renderVillager(Canvas canvas, NativeVillager v) {
     final bob = math.sin(_animTime * 3.2 + v.x) * 1.2;
-    // Legs & sandals.
     final legPaint = Paint()..color = const Color(0xFF8D6E63);
     canvas.drawRect(Rect.fromLTWH(v.x - 5, v.y - 9, 4, 9), legPaint);
     canvas.drawRect(Rect.fromLTWH(v.x + 1, v.y - 9, 4, 9), legPaint);
 
-    // Carved wooden staff with glowing amber tip.
     canvas.drawLine(
       Offset(v.x + 11, v.y),
       Offset(v.x + 11, v.y - 34 + bob),
@@ -708,7 +1058,6 @@ final class JungleSurvivalGame extends FlameGame
       Paint()..color = const Color(0xFFFFCA28),
     );
 
-    // Patterned woven tunic & belt.
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(v.x - 8, v.y - 25 + bob, 16, 17),
@@ -720,7 +1069,6 @@ final class JungleSurvivalGame extends FlameGame
       Rect.fromLTWH(v.x - 8, v.y - 14 + bob, 16, 3),
       Paint()..color = const Color(0xFFFFB300),
     );
-    // Beaded necklace.
     canvas.drawArc(
       Rect.fromCenter(
         center: Offset(v.x, v.y - 24 + bob),
@@ -736,7 +1084,6 @@ final class JungleSurvivalGame extends FlameGame
         ..strokeWidth = 1.8,
     );
 
-    // Head, eyes, and ceremonial facial stripes.
     canvas.drawCircle(
       Offset(v.x, v.y - 31 + bob),
       7.2,
@@ -753,7 +1100,6 @@ final class JungleSurvivalGame extends FlameGame
       Paint()..color = Colors.black87,
     );
 
-    // Multi-feather Macaw Crown (crimson, gold, cyan plumes).
     for (final (angle, color) in const [
       (-0.45, Color(0xFFE53935)),
       (-0.15, Color(0xFFFFCA28)),
@@ -771,7 +1117,6 @@ final class JungleSurvivalGame extends FlameGame
       );
     }
 
-    // Floating villager name tag.
     final tp = TextPainter(
       text: TextSpan(
         text: v.name,
@@ -792,14 +1137,23 @@ final class JungleSurvivalGame extends FlameGame
 
     switch (a.type) {
       case AnimalType.beeSwarm:
-        // Render a buzzing trio of striped honeybees with fluttering wings!
+        // Pulsing acoustic buzz ripple around the swarm.
+        final buzzPulse = 10.0 + ((_animTime * 22.0) % 10.0);
+        canvas.drawCircle(
+          Offset(a.x, a.y - 10.0),
+          buzzPulse,
+          Paint()
+            ..color =
+                a.isAngry ? const Color(0x44FF5252) : const Color(0x33FFD54F)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2,
+        );
         for (int i = 0; i < 3; i++) {
           final phase = _animTime * 16.0 + i * 2.1;
           final bx = a.x + math.cos(phase * 0.7) * 9.0 * (i == 0 ? 0.3 : 1.0);
           final by =
               a.y - 10.0 + math.sin(phase * 1.1) * 6.0 * (i == 0 ? 0.3 : 1.0);
 
-          // Angry crimson aura if provoked.
           if (a.isAngry) {
             canvas.drawCircle(
               Offset(bx, by),
@@ -808,7 +1162,6 @@ final class JungleSurvivalGame extends FlameGame
             );
           }
 
-          // Translucent fluttering wings.
           final wingFlutter = math.sin(_animTime * 48.0 + i) * 3.0;
           final wingPaint = Paint()..color = const Color(0xCCFFFFFF);
           canvas.drawOval(
@@ -828,7 +1181,6 @@ final class JungleSurvivalGame extends FlameGame
             wingPaint,
           );
 
-          // Golden-yellow bee abdomen & black stripes.
           canvas.drawOval(
             Rect.fromCenter(center: Offset(bx, by), width: 9.0, height: 6.0),
             Paint()..color = flash ? Colors.redAccent : const Color(0xFFFFD600),
@@ -849,6 +1201,151 @@ final class JungleSurvivalGame extends FlameGame
           );
         }
 
+      case AnimalType.capuchinMonkey:
+        // Agile Capuchin Monkey with curled prehensile tail, cream face, and
+        // red bandana when befriended!
+        final furColor = flash ? Colors.redAccent : const Color(0xFF5D4037);
+        final creamColor = const Color(0xFFFFECB3);
+        final hop = math.sin(_animTime * 11.0 + a.x * 0.1).abs() * 2.5;
+
+        // Curled prehensile tail.
+        final tailPath =
+            Path()
+              ..moveTo(a.x - dir * 6, a.y - 10 - hop)
+              ..quadraticBezierTo(
+                a.x - dir * 16,
+                a.y - 22 - hop,
+                a.x - dir * 12,
+                a.y - 26 - hop,
+              );
+        canvas.drawPath(
+          tailPath,
+          Paint()
+            ..color = furColor
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.6,
+        );
+
+        // Legs & arms.
+        canvas.drawLine(
+          Offset(a.x - 3, a.y - 7 - hop),
+          Offset(a.x - 4, a.y),
+          Paint()
+            ..color = furColor
+            ..strokeWidth = 2.8,
+        );
+        canvas.drawLine(
+          Offset(a.x + 3, a.y - 7 - hop),
+          Offset(a.x + 4, a.y),
+          Paint()
+            ..color = furColor
+            ..strokeWidth = 2.8,
+        );
+
+        // Torso & cream chest.
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(a.x, a.y - 12 - hop),
+            width: 12,
+            height: 13,
+          ),
+          Paint()..color = furColor,
+        );
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(a.x + dir * 2, a.y - 12 - hop),
+            width: 7,
+            height: 9,
+          ),
+          Paint()..color = creamColor,
+        );
+
+        // Befriended explorer bandana!
+        if (a.isTamed) {
+          canvas.drawRect(
+            Rect.fromLTWH(a.x - 5, a.y - 18 - hop, 10, 2.8),
+            Paint()..color = const Color(0xFFE53935),
+          );
+        }
+
+        // Head, ears, cream face & bright eyes.
+        canvas.drawCircle(
+          Offset(a.x + dir * 2, a.y - 21 - hop),
+          5.8,
+          Paint()..color = furColor,
+        );
+        canvas.drawCircle(
+          Offset(a.x + dir * 3.5, a.y - 20.5 - hop),
+          4.2,
+          Paint()..color = creamColor,
+        );
+        canvas.drawCircle(
+          Offset(a.x + dir * 4.5, a.y - 21.5 - hop),
+          1.2,
+          Paint()..color = Colors.black87,
+        );
+
+      case AnimalType.toucan:
+        // Rainbow Canopy Toucan with fluttering wings, yellow throat & large colorful bill!
+        final flap = math.sin(_animTime * 20.0 + a.x * 0.1) * 5.0;
+        final bodyY = a.y - 8.0;
+        // Black body & tail.
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(a.x, bodyY),
+            width: 15.0,
+            height: 10.0,
+          ),
+          Paint()..color = const Color(0xFF212121),
+        );
+        // Yellow chest patch.
+        canvas.drawCircle(
+          Offset(a.x + dir * 4, bodyY - 1),
+          4.2,
+          Paint()..color = const Color(0xFFFFEE58),
+        );
+        // Wing.
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(a.x - dir * 1, bodyY - 2 + flap * 0.5),
+            width: 9.0,
+            height: 6.0,
+          ),
+          Paint()..color = const Color(0xFF37474F),
+        );
+        // Oversized rainbow toucan beak!
+        final beakPath =
+            Path()
+              ..moveTo(a.x + dir * 6, bodyY - 5)
+              ..quadraticBezierTo(
+                a.x + dir * 16,
+                bodyY - 5,
+                a.x + dir * 17,
+                bodyY,
+              )
+              ..lineTo(a.x + dir * 6, bodyY + 1)
+              ..close();
+        canvas.drawPath(beakPath, Paint()..color = const Color(0xFFFF9100));
+        canvas.drawCircle(
+          Offset(a.x + dir * 15.5, bodyY - 1),
+          1.8,
+          Paint()..color = const Color(0xFFD50000),
+        );
+        // If the toucan just ate a fruit and is carrying a seed, draw the berry/fruit in its beak!
+        if (a.carriedSeed != null) {
+          canvas.drawCircle(
+            Offset(a.x + dir * 14.0, bodyY + 1.5),
+            2.8,
+            Paint()..color = const Color(0xFFE91E63),
+          );
+        }
+        // Cyan eye ring.
+        canvas.drawCircle(
+          Offset(a.x + dir * 4.5, bodyY - 3),
+          1.5,
+          Paint()..color = const Color(0xFF00E5FF),
+        );
+
       case AnimalType.jaguar:
         final bodyColor = flash ? Colors.redAccent : const Color(0xFFFFB300);
         final legCycle = math.sin(_animTime * 15.0) * 4.5;
@@ -857,7 +1354,6 @@ final class JungleSurvivalGame extends FlameGame
               ..color = const Color(0xFFE65100)
               ..strokeWidth = 3.5;
 
-        // 4 Running legs.
         canvas.drawLine(
           Offset(a.x - 9, a.y - 8),
           Offset(a.x - 11 + legCycle, a.y),
@@ -879,7 +1375,6 @@ final class JungleSurvivalGame extends FlameGame
           legPaint,
         );
 
-        // Curved prowling jaguar tail with black tip.
         final tailPath =
             Path()
               ..moveTo(a.x - dir * 13, a.y - 14)
@@ -897,7 +1392,6 @@ final class JungleSurvivalGame extends FlameGame
             ..strokeWidth = 3.0,
         );
 
-        // Muscular body & head.
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromLTWH(a.x - 14, a.y - 18, 28, 12),
@@ -910,7 +1404,6 @@ final class JungleSurvivalGame extends FlameGame
           6.8,
           Paint()..color = bodyColor,
         );
-        // Ears, glowing eye & rosette spots.
         canvas.drawCircle(
           Offset(a.x + dir * 11, a.y - 22),
           2.5,
@@ -928,10 +1421,23 @@ final class JungleSurvivalGame extends FlameGame
             Paint()..color = const Color(0xFF3E2723),
           );
         }
+        // Roar shockwave rings when the jaguar roars or lunges!
+        if (a.badgeTimer > 0 && (a.activityBadge?.contains('ROAR') ?? false)) {
+          for (int ring = 1; ring <= 2; ring++) {
+            final r = 10.0 + ((_animTime * 28.0 + ring * 7.0) % 16.0);
+            canvas.drawCircle(
+              Offset(a.x + dir * 15, a.y - 16),
+              r,
+              Paint()
+                ..color = const Color(0x77FF6E40)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.8,
+            );
+          }
+        }
 
       case AnimalType.snake:
         final snakeColor = flash ? Colors.redAccent : const Color(0xFF00E676);
-        // Sinusoidal slithering segments.
         for (int seg = 0; seg < 5; seg++) {
           final sx = a.x - dir * (seg * 4.2) + dir * 6.0;
           final sy = a.y - 5.0 + math.sin(_animTime * 12.0 + seg * 0.9) * 2.2;
@@ -941,7 +1447,6 @@ final class JungleSurvivalGame extends FlameGame
             Paint()..color = snakeColor,
           );
         }
-        // Raised head & flicking forked red tongue.
         final hx = a.x + dir * 9.0;
         final hy = a.y - 9.0;
         canvas.drawCircle(Offset(hx, hy), 4.8, Paint()..color = snakeColor);
@@ -961,7 +1466,6 @@ final class JungleSurvivalGame extends FlameGame
           Rect.fromLTWH(a.x - 10, a.y - 11, 20, 12),
           Paint()..color = fishColor,
         );
-        // Red belly & tail fin.
         canvas.drawArc(
           Rect.fromLTWH(a.x - 9, a.y - 9, 18, 9),
           0,
@@ -985,6 +1489,35 @@ final class JungleSurvivalGame extends FlameGame
       canvas.drawRect(
         Rect.fromLTWH(a.x - 14, a.y - 28, 28 * pct, 4),
         Paint()..color = Colors.redAccent,
+      );
+    }
+
+    // Render floating plant-animal interaction badge if active (or 💚 Helper for tamed monkey).
+    final badgeText = a.activityBadge ?? (a.isTamed ? '💚 Helper' : null);
+    if (badgeText != null) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: badgeText,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 9.5,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final badgeRect = Rect.fromCenter(
+        center: Offset(a.x, a.y - 36),
+        width: tp.width + 8,
+        height: tp.height + 4,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(badgeRect, const Radius.circular(6)),
+        Paint()..color = const Color(0xBB102018),
+      );
+      tp.paint(
+        canvas,
+        Offset(a.x - tp.width * 0.5, a.y - 36 - tp.height * 0.5),
       );
     }
   }
@@ -1071,13 +1604,11 @@ final class JungleSurvivalGame extends FlameGame
     );
 
     if (worldState.hasWarmPoncho && !hurt) {
-      // Woven golden stripe & poncho trim.
       canvas.drawRect(
         Rect.fromLTWH(px - 7.5, py - 17 + breath, 15, 3),
         Paint()..color = const Color(0xFFFFCA28),
       );
     } else {
-      // Leather belt & brass buckle + cross-body satchel strap.
       canvas.drawRect(
         Rect.fromLTWH(px - 7.5, py - 13.5 + breath, 15, 3),
         Paint()..color = const Color(0xFF3E2723),
@@ -1104,14 +1635,12 @@ final class JungleSurvivalGame extends FlameGame
       6.8,
       Paint()..color = const Color(0xFFFFCCBC),
     );
-    // Ear & jawline shadow.
     canvas.drawCircle(
       Offset(px - dir * 4.5, py - 31.5 + breath),
       2.0,
       Paint()..color = const Color(0xFFE6A18C),
     );
 
-    // Eye & Eyebrow (blinks briefly every 3.6 seconds).
     final isBlinking = (_animTime % 3.6) > 3.45;
     final eyeX = px + dir * 3.2;
     final eyeY = py - 32.0 + breath;
@@ -1131,7 +1660,6 @@ final class JungleSurvivalGame extends FlameGame
         Paint()..color = const Color(0xFF212121),
       );
     }
-    // Explorer Mustache / grin.
     canvas.drawLine(
       Offset(px + dir * 1.5, py - 28.5 + breath),
       Offset(px + dir * 5.0, py - 28.2 + breath),
@@ -1140,7 +1668,6 @@ final class JungleSurvivalGame extends FlameGame
         ..strokeWidth = 1.6,
     );
 
-    // 3D-Shaded Safari Pith Helmet (brim, dome, khaki band, and top button).
     canvas.drawArc(
       Rect.fromCenter(
         center: Offset(px, py - 34.5 + breath),
@@ -1152,12 +1679,10 @@ final class JungleSurvivalGame extends FlameGame
       true,
       Paint()..color = const Color(0xFFFBC02D),
     );
-    // Helmet band.
     canvas.drawRect(
       Rect.fromLTWH(px - 7.5, py - 36.2 + breath, 15, 2.2),
       Paint()..color = const Color(0xFF6D4C41),
     );
-    // Helmet wide sun brim.
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(px + dir * 1.0, py - 34.5 + breath),
@@ -1202,7 +1727,6 @@ final class JungleSurvivalGame extends FlameGame
   }) {
     final pantsColor =
         isFront ? const Color(0xFF5D4037) : const Color(0xFF4E342E);
-    // Cargo shorts & lower leg.
     canvas.drawLine(
       Offset(worldState.playerX, footY - 11),
       Offset(footX, footY - 3),
@@ -1211,7 +1735,6 @@ final class JungleSurvivalGame extends FlameGame
         ..strokeWidth = 4.4
         ..strokeCap = StrokeCap.round,
     );
-    // Laced leather boot.
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(footX - 3.0, footY - 4.0, 6.5, 4.2),
@@ -1355,5 +1878,26 @@ final class JungleSurvivalGame extends FlameGame
             const Color(0xAA040814),
           ]);
     canvas.drawRect(Rect.fromLTWH(0, 0, viewW, viewH), nightPaint);
+
+    // Bioluminescent Glow-Bulb crops radiate soft cyan-lime halos at night!
+    for (final crop in worldState.crops.values) {
+      if (crop.seedType == ItemType.glowBulbSeeds &&
+          crop.growthProgress >= 0.33) {
+        final gx = crop.tileX * JungleWorld.tileSize + 16.0 - cam.dx;
+        final gy = crop.tileY * JungleWorld.tileSize + 16.0 - cam.dy;
+        if (gx >= -80 && gx <= viewW + 80 && gy >= -80 && gy <= viewH + 80) {
+          final radius = 42.0 + crop.growthProgress * 36.0;
+          canvas.drawCircle(
+            Offset(gx, gy),
+            radius,
+            Paint()
+              ..shader = Gradient.radial(Offset(gx, gy), radius, [
+                const Color(0x5500E5FF),
+                const Color(0x0000E5FF),
+              ]),
+          );
+        }
+      }
+    }
   }
 }

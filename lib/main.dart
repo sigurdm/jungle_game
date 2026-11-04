@@ -5,6 +5,7 @@ import 'src/game_hud.dart';
 export 'src/game_hud.dart';
 export 'src/jungle_flame_game.dart';
 export 'src/models.dart';
+export 'src/sound_synthesizer.dart';
 export 'src/world_state.dart';
 
 /// Entry point for the 2D Side-Scrolling Jungle Survival Flutter Game.

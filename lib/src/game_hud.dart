@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'jungle_flame_game.dart';
 import 'models.dart';
+import 'sound_synthesizer.dart';
 import 'world_state.dart';
 
 /// Main interactive screen hosting the [JungleSurvivalGame] canvas and HUD.
@@ -15,7 +16,7 @@ final class JungleSurvivalScreen extends StatefulWidget {
 }
 
 final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
-  late final JungleWorld _world;
+  late JungleWorld _world;
   late final JungleSurvivalGame _game;
   bool _showMobileControls = true;
 
@@ -29,6 +30,16 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
         if (mounted) setState(() {});
       },
     );
+  }
+
+  void _regenerateWorldWithSeed([int? customSeed]) {
+    setState(() {
+      _world = JungleWorld.generate(seed: customSeed);
+      _game.worldState = _world;
+      _world.setBanner(
+        '🌍 Generated new infinite jungle world (Seed #${_world.worldSeed})! Walk West or East to stream new biomes!',
+      );
+    });
   }
 
   @override
@@ -186,6 +197,35 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                   ),
                 ),
               ),
+              Builder(
+                builder: (_) {
+                  final climate = _world.evaluateMicroclimate(
+                    _world.playerTileX,
+                    _world.playerTileY,
+                  );
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1B3B2B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.tealAccent.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      '${_world.currentBiome.icon} ${_world.currentBiome.label} • ${climate.soilType.icon} ${climate.soilType.label} • ${climate.microclimateLabel} • X:${_world.playerTileX}',
+                      style: const TextStyle(
+                        color: Colors.tealAccent,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
 
@@ -203,6 +243,12 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                 },
               ),
               _HudChipButton(
+                label:
+                    '🌱 Seeds (${_world.sowedSeedVarieties.length}/${ItemType.allSeedVarieties.length})',
+                color: const Color(0xFF2E7D32),
+                onPressed: _openSeedPouchModal,
+              ),
+              _HudChipButton(
                 label: '🔨 Craft Shelter & Tools',
                 color: const Color(0xFFD84315),
                 onPressed: _openCraftingModal,
@@ -217,6 +263,26 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                         ? const Color(0xFF00897B)
                         : const Color(0xFF455A64),
                 onPressed: _openVillageTradeModal,
+              ),
+              _HudChipButton(
+                label: '🌍 World (#${_world.worldSeed})',
+                color: const Color(0xFF0277BD),
+                onPressed: _openWorldGeneratorModal,
+              ),
+              _HudChipButton(
+                label:
+                    !_world.soundEnabled
+                        ? '🔇 Sound: OFF'
+                        : (_world.lastSoundEvent != null
+                            ? '🔊 ${_world.lastSoundEvent!.badgeText}'
+                            : (_world.beeBuzzIntensity > 0.08
+                                ? '🔊 🐝 Buzz (${(_world.beeBuzzIntensity * 100).round()}%)'
+                                : '🔊 Sound: ON')),
+                color:
+                    !_world.soundEnabled
+                        ? const Color(0xFF455A64)
+                        : const Color(0xFF00695C),
+                onPressed: _openSoundModal,
               ),
               _HudChipButton(
                 label: '📓 Journal',
@@ -236,6 +302,177 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _openSoundModal() {
+    _game.soundscape.unlockAudio();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF141E24),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.68,
+              maxChildSize: 0.88,
+              builder: (_, controller) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '🔊 Procedural Jungle Soundscape & Synth',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Switch(
+                            value: _world.soundEnabled,
+                            activeThumbColor: Colors.tealAccent,
+                            onChanged: (val) {
+                              setState(() {
+                                _world.soundEnabled = val;
+                              });
+                              setModalState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'All sounds are 2-channel stereo relative to the explorer (equal-power panning + interaural Haas delay). Walk left or right of beehives, roaring jaguars, and wildlife to hear them pan across your ears!',
+                        style: TextStyle(
+                          color: Colors.greenAccent.shade100,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Live Bee Proximity Buzz: ${(_world.beeBuzzIntensity * 100).round()}% • Stereo Pan: ${_world.beeBuzzPan <= -0.15 ? "◀ Left (${(_world.beeBuzzPan * 100).round()}%)" : (_world.beeBuzzPan >= 0.15 ? "Right ▶ (+${(_world.beeBuzzPan * 100).round()}%)" : "● Center")} ${_world.beeBuzzAngry ? "(⚠️ Angry Swarm!)" : ""}',
+                        style: const TextStyle(
+                          color: Colors.amberAccent,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: ListView.builder(
+                          controller: controller,
+                          itemCount: SoundCue.values.length,
+                          itemBuilder: (_, idx) {
+                            final cue = SoundCue.values[idx];
+                            final samples =
+                                JungleSoundSynthesizer.synthesizeSamples(cue);
+                            final zcrHz =
+                                JungleSoundSynthesizer.estimateZeroCrossingHz(
+                                  samples,
+                                ).round();
+                            void auditionAtPan(double panValue) {
+                              _world.soundEnabled = true;
+                              final ev = SoundEvent(
+                                cue: cue,
+                                volume: 0.90,
+                                pan: panValue,
+                              );
+                              _world.lastSoundEvent = ev;
+                              _world.lastSoundTimer = 2.4;
+                              _game.soundscape.playEvent(
+                                ev,
+                                soundEnabled: true,
+                              );
+                              setModalState(() {});
+                              setState(() {});
+                            }
+
+                            return Card(
+                              color: const Color(0xFF1E2C34),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                leading: Text(
+                                  cue.icon,
+                                  style: const TextStyle(fontSize: 26),
+                                ),
+                                title: Text(
+                                  cue.label,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Duration: ${(cue.defaultDuration * 1000).round()} ms  •  ~$zcrHz Hz  •  2ch Stereo',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Play Left of Explorer (-0.8)',
+                                      icon: const Text(
+                                        '◀ L',
+                                        style: TextStyle(
+                                          color: Colors.cyanAccent,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      onPressed: () => auditionAtPan(-0.8),
+                                    ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFF00796B,
+                                        ),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                        ),
+                                      ),
+                                      onPressed: () => auditionAtPan(0.0),
+                                      child: const Text('● Play'),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Play Right of Explorer (+0.8)',
+                                      icon: const Text(
+                                        'R ▶',
+                                        style: TextStyle(
+                                          color: Colors.cyanAccent,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      onPressed: () => auditionAtPan(0.8),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 
@@ -330,6 +567,29 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _TapActionButton(
+              label: '🌱 Next Seed',
+              color: const Color(0xFF33691E),
+              onTap: () {
+                _world.cycleEquippedSeed();
+                setState(() {});
+              },
+            ),
+            const SizedBox(width: 8),
+            _TapActionButton(
+              label: '🐒 Feed',
+              color: const Color(0xFF6A1B9A),
+              onTap: () {
+                _world.feedNearbyWildlife();
+                setState(() {});
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -478,6 +738,211 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
     );
   }
 
+  void _openSeedPouchModal() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF141E24),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final localClimate = _world.evaluateMicroclimate(
+              _world.playerTileX,
+              _world.playerTileY,
+            );
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.76,
+              maxChildSize: 0.92,
+              builder: (_, controller) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '🌱 Seed Pouch, Soils & Microclimates (${_world.sowedSeedVarieties.length}/${ItemType.allSeedVarieties.length})',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.close,
+                              color: Colors.white70,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'Here at X:${_world.playerTileX}: ${localClimate.soilType.icon} ${localClimate.soilType.label}  •  ${localClimate.microclimateLabel}',
+                        style: const TextStyle(
+                          color: Colors.cyanAccent,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        localClimate.soilType.summary,
+                        style: TextStyle(
+                          color: Colors.greenAccent.shade100,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: ListView.builder(
+                          controller: controller,
+                          itemCount: ItemType.allSeedVarieties.length,
+                          itemBuilder: (_, idx) {
+                            final seed = ItemType.allSeedVarieties[idx];
+                            final count = _world.inventory[seed] ?? 0;
+                            final sowedBefore = _world.sowedSeedVarieties
+                                .contains(seed);
+                            final isEquipped = _world.equippedItem == seed;
+                            final product = seed.harvestedProduct;
+                            final localAffinity = localClimate.affinityBadgeFor(
+                              seed,
+                            );
+
+                            return Card(
+                              color:
+                                  isEquipped
+                                      ? const Color(0xFF1F3828)
+                                      : const Color(0xFF1E2C34),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                leading: Text(
+                                  seed.icon,
+                                  style: const TextStyle(fontSize: 28),
+                                ),
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${seed.label} (x$count)',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      margin: const EdgeInsets.only(right: 6),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF263238),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'Here: $localAffinity',
+                                        style: const TextStyle(
+                                          color: Colors.lightGreenAccent,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    if (sowedBefore)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF2E7D32),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          '✓ Sowed',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      seed.ecologyNote ?? '',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '🌍 Habitat: ${seed.preferredHabitatNote}',
+                                      style: const TextStyle(
+                                        color: Colors.cyanAccent,
+                                        fontSize: 11.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Harvests: ${product.icon} ${product.label}  •  Base Speed: ${(seed.seedGrowthFactor * 100).round()}%${seed.regrowsOnHarvest ? "  •  ♻️ Perennial (regrows)" : "  •  🌳 Grows Canopy Tree"}',
+                                      style: const TextStyle(
+                                        color: Colors.amberAccent,
+                                        fontSize: 11.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                trailing: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        count > 0
+                                            ? const Color(0xFF2E7D32)
+                                            : Colors.grey.shade800,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  onPressed:
+                                      count > 0
+                                          ? () {
+                                            _world.equipSeedVariety(seed);
+                                            setModalState(() {});
+                                            setState(() {});
+                                            Navigator.pop(context);
+                                          }
+                                          : null,
+                                  child: Text(isEquipped ? 'Equipped' : 'Sow'),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _openCraftingModal() {
     showModalBottomSheet<void>(
       context: context,
@@ -507,7 +972,7 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            '🔨 Jungle Crafting & Shelter Workshop',
+                            '🔨 Jungle Crafting, Seeds & Shelter Workshop',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -524,7 +989,7 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                         ],
                       ),
                       Text(
-                        'Tip: To protect from night cold, place Wood Planks / Thatch Roof overhead, fill the room with Background Walls, add a Door, and light a Campfire inside!',
+                        'Tip: Craft specialized seeds (🌿 Herb, 🌵 Briar Thorn, 💡 Glow-Bulb, 🌺 Pitcher, 🌳 Sapling) or build warm shelters!',
                         style: TextStyle(
                           color: Colors.greenAccent.shade100,
                           fontSize: 12.5,
@@ -678,9 +1143,9 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                           ),
                         )
                       else
-                        const Text(
-                          'Native Villages are located at tile X=38 (West Village) and X=120 (East Village). You can trade harvested fruits and fish with them:',
-                          style: TextStyle(
+                        Text(
+                          'Discovered Native Villages (${_world.villagers.length} found so far — more generate infinitely as you explore West & East!):',
+                          style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 12.5,
                           ),
@@ -696,7 +1161,7 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                                   vertical: 6,
                                 ),
                                 child: Text(
-                                  '🛖 ${v.name} — ${v.role}',
+                                  '🛖 ${v.name} — ${v.role} (X:${JungleWorld.pixelToTile(v.x)})',
                                   style: const TextStyle(
                                     color: Colors.tealAccent,
                                     fontWeight: FontWeight.bold,
@@ -760,22 +1225,120 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
     );
   }
 
+  void _openWorldGeneratorModal() {
+    final seedController = TextEditingController(
+      text: _world.worldSeed.toString(),
+    );
+    final (minTileX, maxTileX) = _world.generatedTileBounds;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF141E24),
+          title: const Text(
+            '🌍 Infinite Procedural World Generator',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Current Seed: #${_world.worldSeed}\n'
+                  'Current Biome: ${_world.currentBiome.icon} ${_world.currentBiome.label}\n'
+                  'Explorer Position: Tile X=${_world.playerTileX}, Y=${_world.playerTileY}\n'
+                  'Streamed Chunks: ${_world.generatedChunkCount} chunks (${_world.exploredTileSpan} tiles: X=$minTileX..$maxTileX)\n'
+                  'Discovered Villages: ${_world.villagers.length} • Wild/Planted Crops: ${_world.crops.length}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'As you walk West (-X) or East (+X), new 16-tile chunks are generated on the fly with seamless elevation transitions across 5 biomes:\n'
+                  '• 🌴 Emerald Canopy • 🏞️ River Lagoon • 🌺 Wild Botanical Grove\n'
+                  '• ⛰️ Mist Highlands • 🛖 Native Village',
+                  style: TextStyle(color: Colors.tealAccent, fontSize: 12),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: seedController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Custom World Seed (Integer)',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.tealAccent),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00897B),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final parsed = int.tryParse(seedController.text.trim());
+                Navigator.pop(ctx);
+                _regenerateWorldWithSeed(parsed);
+              },
+              child: const Text('Load Seed'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0277BD),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _regenerateWorldWithSeed();
+              },
+              child: const Text('🎲 Random New World'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _openJournalModal() {
     showDialog<void>(
       context: context,
       builder: (ctx) {
         final milestones = [
           (
-            '🌱 Gather Wild Seeds from Bushes or Grass',
+            '🌱 Gather Wild Seeds from Bushes, Vines, or Grass',
             _world.milestoneGatheredSeeds,
           ),
-          ('🌾 Sow Seeds onto Tilled Jungle Soil', _world.milestoneSowedCrop),
           (
-            '🍌 Harvest Ripe Fruit from a Grown Crop',
+            '🌾 Sow Crops on Tilled Soil (${_world.sowedSeedVarieties.length}/${ItemType.allSeedVarieties.length} seed varieties sowed)',
+            _world.milestoneSowedCrop,
+          ),
+          (
+            '🌸 Trigger a Plant-Animal Interaction (Pollination, Snake Ward, Briar, Pitcher)',
+            _world.milestonePlantAnimalInteraction,
+          ),
+          (
+            '🐒 Befriend a Capuchin Monkey with Bananas or Berries',
+            _world.milestoneBefriendedMonkey,
+          ),
+          (
+            '🍌 Harvest Ripe Fruit or Nectar from a Grown Crop',
             _world.milestoneHarvestedFruit,
           ),
           (
-            '🍯 Harvest Golden Honeycomb from a Beehive (use 🕯️ Torch smoke!)',
+            '🍯 Harvest Golden Honeycomb from a Beehive (use 🕯️ Torch or 💡 Glow-Bulb!)',
             _world.milestoneHarvestedHoney,
           ),
           (
@@ -798,7 +1361,7 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
         return AlertDialog(
           backgroundColor: const Color(0xFF182228),
           title: const Text(
-            '📓 Explorer Survival Journal & Controls',
+            '📓 Explorer Survival Journal & Ecology Guide',
             style: TextStyle(color: Colors.white),
           ),
           content: SingleChildScrollView(
@@ -841,7 +1404,7 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                   ),
                 const Divider(color: Colors.white24, height: 22),
                 const Text(
-                  'Controls (Mobile Touch & Desktop):',
+                  'Plant-Animal Interactions & Controls:',
                   style: TextStyle(
                     color: Colors.tealAccent,
                     fontWeight: FontWeight.bold,
@@ -849,9 +1412,9 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  '• Tap / Hold any tile within reach to Mine, Sow Seeds, Harvest Ripe Crops, or Place Shelter Blocks & Walls.\n'
-                  '• Desktop Keys: A/D or Left/Right to Move, W/Space to Jump/Swim/Climb Vines, E to Eat Food, F to Cast/Reel Fishing Rod, Q to Attack.\n'
-                  '• Mobile Pad: Use the on-screen D-Pad + JUMP / USE / FISH / ATTACK buttons.',
+                  '• Tap "🌱 Seeds" (or press R) to choose from 8 seed varieties: Berry, Banana, Mango, Medicinal Herb (repels 🐍 Vipers), Glow-Bulb (night light & calms 🐝 Bees), Briar Thorn (pricks 🐆 Jaguars), Pitcher Plant (traps snakes & fertilizes crops), and Mahogany Sapling (grows full trees).\n'
+                  '• Tap a 🐒 Capuchin Monkey or 🦜 Rainbow Toucan (or tap "🐒 Feed") while carrying fruit to befriend monkeys into crop-harvesting helpers!\n'
+                  '• Desktop Keys: A/D Move, W/Space Jump/Swim/Climb, R Cycle Seed, E Eat, F Fish, Q Attack.',
                   style: TextStyle(color: Colors.white70, fontSize: 12.5),
                 ),
               ],
