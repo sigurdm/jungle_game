@@ -650,7 +650,7 @@ final class JungleWorld {
           biome,
           chunkRng,
         );
-        if (biome == JungleBiome.mistHighlands) {
+        if (biome == JungleBiome.mistHighlands || chunkIndex == 1) {
           _buildAbyssObsidianVaultInChunk(chunkStart);
         }
     }

@@ -737,13 +737,13 @@ void main() {
         );
         expect(world.inventory[ItemType.marshTotemShard], 1);
 
-        // Sky Sanctuary Pedestal at (tx=22, ty=7) and Abyss Vault Pedestal at (tx=24, ty=40).
+        // Sky Sanctuary Pedestal at (tx=22, ty=7) and Abyss Vault Pedestal at (tx=24, ty=41).
         expect(world.getBlock(22, 7), BlockType.totemPedestal);
         expect(world.claimTotemPedestalAt(22, 7), isTrue);
         expect(world.inventory[ItemType.skyTotemShard], 1);
 
-        expect(world.getBlock(24, 40), BlockType.totemPedestal);
-        expect(world.claimTotemPedestalAt(24, 40), isTrue);
+        expect(world.getBlock(24, 41), BlockType.totemPedestal);
+        expect(world.claimTotemPedestalAt(24, 41), isTrue);
         expect(world.inventory[ItemType.abyssTotemShard], 1);
 
         // Return to the Ancient Jungle Shrine beside starter camp (tx=31) and socket all 3 shards!
