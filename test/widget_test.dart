@@ -661,7 +661,7 @@ void main() {
         final obsTx = world.playerTileX + 1;
         final obsTy = world.playerTileY;
         world.blocks[obsTy][obsTx] = BlockType.ancientObsidian;
-        expect(world.interactOrPlaceAt(obsTx, obsTy), isFalse);
+        world.mineTileStep(obsTx, obsTy, 1.0);
         expect(world.getBlock(obsTx, obsTy), BlockType.ancientObsidian);
 
         // Craft / equip Stone Pickaxe -> breaches Ancient Obsidian!
@@ -669,7 +669,7 @@ void main() {
         world.hotbar[0] = ItemType.stonePickaxe;
         expect(world.canMineBlock(BlockType.ironOre), isTrue);
         expect(world.canMineBlock(BlockType.ancientObsidian), isTrue);
-        expect(world.interactOrPlaceAt(obsTx, obsTy), isTrue);
+        world.mineTileStep(obsTx, obsTy, 1.0);
         expect(world.getBlock(obsTx, obsTy), BlockType.air);
 
         // 3. Ecological Gate 1 — Pitch-Black Abyss (y >= 31): drains warmth & health
