@@ -4,14 +4,14 @@ A 2D side-scrolling block survival, botany, and living-ecosystem game built with
 
 ## Core Features
 
-### 🌱 8 Sowable Seed & Sapling Varieties
-Sow diverse seeds onto jungle grass or dirt (`BlockType.tilledSoil`), track all 8 varieties in the **Seed Pouch (`🌱 Seeds`)**, or press `R` (`🌱 Next Seed`) to cycle seeds on the fly:
+### 🌱 8 Multi-Tile Sowable Seed & Sapling Varieties
+Sow diverse seeds onto jungle grass or dirt (`BlockType.tilledSoil`), track all 8 varieties in the **Seed Pouch (`🌱 Seeds`)**, or press `R` (`🌱 Next Seed`) to cycle seeds on the fly. As sown plants reach maturity (`stage >= 2`), they spread across **multiple tiles (`2–3` squares tall and `2–3` squares wide)**, placing solid **Overgrown Stalk (`BlockType.overgrownStalk`)** and **Thorny Briar (`BlockType.thornyBriar`)** blocks that physically get in the way until chopped down with a machete, spear, or pickaxe:
 1. **🌱 Berry Seeds (`ItemType.berrySeeds`)**: Fast-growing perennial shrub yielding `🫐 Jungle Berries`. Attracts **Rainbow Toucans** and **Capuchin Monkeys** that disperse new seeds nearby.
-2. **🌾 Banana Seeds (`ItemType.bananaSeeds`)**: Tall tropical banana palm yielding `🍌 Ripe Bananas`—the favorite treat for befriending **Capuchin Monkeys**.
-3. **✨ Golden Mango Seeds (`ItemType.mangoSeeds`)**: High-energy fruit crop whose fragrant blossoms attract **Bees** and **Toucans** for cross-pollination.
+2. **🌾 Banana Seeds (`ItemType.bananaSeeds`)**: Tall (`3`-tile high × `3`-tile wide) tropical banana palm yielding `🍌 Ripe Bananas`—the favorite treat for befriending **Capuchin Monkeys**.
+3. **✨ Golden Mango Seeds (`ItemType.mangoSeeds`)**: High-energy fruit crop (`3×3` tiles) whose fragrant blossoms attract **Bees** and **Toucans** for cross-pollination.
 4. **🌿 Medicinal Herb Seeds (`ItemType.healingHerbSeeds`)**: Yields `🌿 Healing Poultices` (`+40 HP`) and emits an aromatic aura that **repels venomous 🐍 Emerald Vipers** within 4 tiles.
 5. **💡 Glow-Bulb Spores (`ItemType.glowBulbSeeds`)**: Bioluminescent lotus plant that **illuminates the night**, radiates gentle warmth, **calms 🐝 Bees** for safe honeycomb harvesting, and **lures river fish** while pacifying **🐟 Piranhas**.
-6. **🌵 Briar Thorn Seeds (`ItemType.thornVineSeeds`)**: Living defensive thorny hedge that **pricks and knocks back prowling 🐆 Jaguars and 🐍 Vipers** without blocking the explorer.
+6. **🌵 Briar Thorn Seeds (`ItemType.thornVineSeeds`)**: Dense `2×3`-tile thorny hedge (`BlockType.thornyBriar`) that **blocks paths and pricks/knocks back prowling 🐆 Jaguars and 🐍 Vipers** until chopped down.
 7. **🌺 Pitcher Plant Seeds (`ItemType.pitcherPlantSeeds`)**: Carnivorous jungle plant that **lures and digests nearby 🐍 Vipers**, harvesting `🧪 Pitcher Nectar` and **fertilizing adjacent crops (`+60%` growth speed)**.
 8. **🌳 Mahogany Sapling (`ItemType.mahoganySapling`)**: Grows into a full multi-tile **Mahogany Canopy Tree** with climbable vines and a chance to attract a wild **🪹 Beehive & 🐝 Bee Swarm**.
 

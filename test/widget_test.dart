@@ -759,6 +759,91 @@ void main() {
         expect(world.abyssBlessingActive, isTrue);
       },
     );
+
+    test(
+      'sown plants grow across multiple squares, physically block movement when overgrown, and can be chopped down',
+      () {
+        final world = JungleWorld.generate(seed: 88);
+        world.animals.clear();
+        world.crops.clear();
+
+        // Prepare a flat 7-tile clearing around the explorer at y = 20 (ground at y = 21).
+        final baseTx = 28;
+        final groundY = 21;
+        final cropY = groundY - 1;
+        for (int dx = -3; dx <= 5; dx++) {
+          for (int y = 14; y <= cropY; y++) {
+            world.blocks[y][baseTx + dx] = BlockType.air;
+          }
+          world.blocks[groundY][baseTx + dx] = BlockType.grass;
+        }
+
+        world.playerX = (baseTx - 1) * JungleWorld.tileSize + 16.0;
+        world.playerY = groundY * JungleWorld.tileSize;
+
+        // Sow Banana Seeds 2 tiles to the right of the explorer (at baseTx + 1).
+        final plantTx = baseTx + 1;
+        world.addItem(ItemType.bananaSeeds, 2);
+        expect(world.sowSeedAt(plantTx, cropY, ItemType.bananaSeeds), isTrue);
+        final bananaCrop = world.crops['$plantTx,$cropY']!;
+        expect(bananaCrop.isBlockingPath, isFalse);
+
+        // Grow the Banana Palm to full maturity (1.0): it expands into a 3-tile
+        // tall × 3-tile wide multi-square structure of solid BlockType.overgrownStalk!
+        bananaCrop.growthProgress = 1.0;
+        world.update(0.05);
+        expect(bananaCrop.isBlockingPath, isTrue);
+        expect(bananaCrop.overgrownTiles.length, greaterThanOrEqualTo(5));
+        expect(world.getBlock(plantTx, cropY), BlockType.overgrownStalk);
+        expect(world.getBlock(plantTx, cropY - 1), BlockType.overgrownStalk);
+        expect(world.getBlock(plantTx, cropY - 2), BlockType.overgrownStalk);
+        expect(
+          world.getBlock(plantTx - 1, cropY - 1),
+          BlockType.overgrownStalk,
+        );
+        expect(
+          world.getBlock(plantTx + 1, cropY - 1),
+          BlockType.overgrownStalk,
+        );
+
+        // Try walking right through the overgrown Banana Palm: the explorer is
+        // physically blocked from passing plantTx!
+        for (int i = 0; i < 20; i++) {
+          world.update(0.05, moveRight: true);
+        }
+        expect(world.playerX, lessThan(plantTx * JungleWorld.tileSize + 4.0));
+
+        // Harvesting the ripe bananas picks the fruit while leaving the
+        // overgrown stalks standing in the way.
+        world.selectedHotbarIndex = 0; // Wood Pickaxe
+        expect(world.interactOrPlaceAt(plantTx, cropY), isTrue);
+        expect(bananaCrop.isBlockingPath, isTrue);
+        expect(world.getBlock(plantTx, cropY), BlockType.overgrownStalk);
+
+        // Chop the overgrown plant down: all multi-tile overgrownStalk blocks
+        // clear to air and the explorer can walk freely through the cleared path!
+        final fibersBefore = world.inventory[ItemType.vineFiber] ?? 0;
+        world.mineTileStep(plantTx, cropY, 0.5);
+        expect(world.crops.containsKey('$plantTx,$cropY'), isFalse);
+        expect(world.getBlock(plantTx, cropY), BlockType.air);
+        expect(world.getBlock(plantTx, cropY - 1), BlockType.air);
+        expect(world.getBlock(plantTx, cropY - 2), BlockType.air);
+        expect(world.getBlock(plantTx - 1, cropY - 1), BlockType.air);
+        expect(world.getBlock(plantTx + 1, cropY - 1), BlockType.air);
+        expect(
+          world.inventory[ItemType.vineFiber] ?? 0,
+          greaterThan(fibersBefore),
+        );
+
+        for (int i = 0; i < 20; i++) {
+          world.update(0.05, moveRight: true);
+        }
+        expect(
+          world.playerX,
+          greaterThan((plantTx + 1) * JungleWorld.tileSize),
+        );
+      },
+    );
   });
 
   testWidgets(

@@ -291,6 +291,28 @@ enum BlockType {
     flammability: 0.0,
     primaryColor: Color(0xFF37474F),
     accentColor: Color(0xFFFFD700),
+  ),
+
+  /// Thick, tangled woody stalks and branches grown by mature crops that
+  /// physically block movement until chopped down with an axe, machete, or pickaxe.
+  overgrownStalk(
+    label: 'Overgrown Plant Stalk',
+    isSolid: true,
+    hardness: 0.42,
+    flammability: 0.68,
+    primaryColor: Color(0xFF2E7D32),
+    accentColor: Color(0xFF81C784),
+  ),
+
+  /// Impassable thorny briar thicket grown by [ItemType.thornVineSeeds] that
+  /// physically blocks and pricks predators and explorers until chopped down.
+  thornyBriar(
+    label: 'Thorny Briar Thicket',
+    isSolid: true,
+    hardness: 0.55,
+    flammability: 0.60,
+    primaryColor: Color(0xFF33691E),
+    accentColor: Color(0xFFD50000),
   );
 
   const BlockType({
@@ -320,9 +342,13 @@ enum BlockType {
   /// Secondary accent color for procedural tile rendering.
   final Color accentColor;
 
+  /// Whether this block is an overgrown plant structure that can be chopped down.
+  bool get isOvergrownPlant =>
+      this == BlockType.overgrownStalk || this == BlockType.thornyBriar;
+
   /// Whether this block acts as an overhead roof for cold shelter calculation.
   bool get countsAsRoof =>
-      isSolid ||
+      (isSolid && !isOvergrownPlant) ||
       this == BlockType.woodPlank ||
       this == BlockType.thatchRoof ||
       this == BlockType.villageHutBlock ||
@@ -1028,6 +1054,30 @@ enum ItemType {
     _ => ItemType.jungleBerry,
   };
 
+  /// Maximum vertical height in tiles (`2..7`) reached when this seed grows big.
+  int get maxPlantHeightTiles => switch (this) {
+    ItemType.mahoganySapling => 7,
+    ItemType.bananaSeeds || ItemType.mangoSeeds || ItemType.thornVineSeeds => 3,
+    ItemType.berrySeeds ||
+    ItemType.pitcherPlantSeeds ||
+    ItemType.glowBulbSeeds ||
+    ItemType.healingHerbSeeds => 2,
+    _ => 1,
+  };
+
+  /// Maximum horizontal width in tiles (`2..5`) spanned when this seed grows big.
+  int get maxPlantWidthTiles => switch (this) {
+    ItemType.mahoganySapling => 5,
+    ItemType.bananaSeeds ||
+    ItemType.mangoSeeds ||
+    ItemType.thornVineSeeds ||
+    ItemType.berrySeeds => 3,
+    ItemType.pitcherPlantSeeds ||
+    ItemType.glowBulbSeeds ||
+    ItemType.healingHerbSeeds => 2,
+    _ => 1,
+  };
+
   /// Guide describing which soil type and microclimate this seed prefers and
   /// dislikes.
   String get preferredHabitatNote => switch (this) {
@@ -1229,6 +1279,15 @@ final class CropPlot {
   /// Number of climbing or creeping vine/runner segments (`0..4`) sprouted by
   /// this plant as it matures.
   int vineSegments;
+
+  /// World tile coordinates `(tx, ty)` currently occupied by solid
+  /// [BlockType.overgrownStalk] or [BlockType.thornyBriar] blocks grown by this
+  /// plant as it expands beyond a single square.
+  final Set<(int, int)> overgrownTiles = {};
+
+  /// Whether this plant has grown solid multi-tile stalks/thickets that
+  /// physically block movement until chopped down.
+  bool get isBlockingPath => overgrownTiles.isNotEmpty;
 
   /// Whether this plant species naturally extends climbing tendrils and
   /// creeping stolon vines as it grows.

@@ -2058,11 +2058,16 @@ final class JungleWorld {
       return harvestHoneyFromHive(tx, ty);
     }
 
-    // 2. Check if a ripe crop is at (tx, ty) or (tx, ty - 1).
-    for (final cy in [ty, ty - 1]) {
-      final key = '$tx,$cy';
-      if (crops[key] case final crop? when crop.isMature) {
-        return _harvestMatureCrop(key, crop);
+    // 2. Check if a ripe crop (or its multi-tile overgrown canopy/stalk) is at (tx, ty).
+    if (findCropOccupyingTile(tx, ty) case final crop?) {
+      final cropKey = '${crop.tileX},${crop.tileY}';
+      if (crop.isMature && crop.seedType != ItemType.thornVineSeeds) {
+        return _harvestMatureCrop(cropKey, crop);
+      }
+      if (block.isOvergrownPlant &&
+          (equippedItem == ItemType.ironMachete ||
+              equippedItem == ItemType.woodSpear)) {
+        return chopOvergrownPlantAt(tx, ty);
       }
     }
 
@@ -2237,10 +2242,15 @@ final class JungleWorld {
     if (crop.seedType.regrowsOnHarvest) {
       crop.growthProgress = 0.42;
       crop.isPollinated = false;
+      final chopHint =
+          crop.isBlockingPath
+              ? ' Overgrown stalks still block the path — chop with 🪓 Axe / 🗡️ Machete to clear!'
+              : '';
       setBanner(
-        'Harvested ${productCount}x ${product.icon} ${product.label}$bonusText! Perennial plant will regrow.',
+        'Harvested ${productCount}x ${product.icon} ${product.label}$bonusText! Perennial plant will regrow.$chopHint',
       );
     } else {
+      _clearCropOvergrowthBlocks(crop);
       crops.remove(key);
       setBanner(
         'Harvested ${productCount}x ${product.icon} ${product.label} + seeds$bonusText!',
@@ -2249,7 +2259,157 @@ final class JungleWorld {
     return true;
   }
 
+  /// Returns the [CropPlot] whose root tile or multi-tile overgrown stalks
+  /// occupy ([tx], [ty]), or `null` if none.
+  CropPlot? findCropOccupyingTile(int tx, int ty) {
+    for (final cy in [ty, ty - 1, ty + 1, ty + 2]) {
+      if (crops['$tx,$cy'] case final crop?) {
+        if (cy == ty ||
+            crop.overgrownTiles.contains((tx, ty)) ||
+            (cy == ty + 1 && crop.growthProgress >= 0.45)) {
+          return crop;
+        }
+      }
+    }
+    for (final crop in crops.values) {
+      if (crop.overgrownTiles.contains((tx, ty))) {
+        return crop;
+      }
+    }
+    return null;
+  }
+
+  bool _doesPlayerOverlapTile(int tx, int ty) {
+    const halfW = 10.0;
+    const heightPx = 27.0;
+    final leftTile = pixelToTile(playerX - halfW);
+    final rightTile = pixelToTile(playerX + halfW);
+    final topTile = pixelToTile(playerY - heightPx);
+    final bottomTile = pixelToTile(playerY - 1.0);
+    return tx >= leftTile &&
+        tx <= rightTile &&
+        ty >= topTile &&
+        ty <= bottomTile;
+  }
+
+  void _syncCropOvergrowthBlocks(CropPlot crop) {
+    if (crop.seedType == ItemType.mahoganySapling) return;
+    if (crop.growthProgress < 0.65) return;
+
+    final plantBlock =
+        crop.seedType == ItemType.thornVineSeeds
+            ? BlockType.thornyBriar
+            : BlockType.overgrownStalk;
+    final tx = crop.tileX;
+    final ty = crop.tileY;
+
+    final candidateTiles = <(int, int)>[
+      (tx, ty),
+      if (ty - 1 >= 1) (tx, ty - 1),
+    ];
+
+    if (crop.growthProgress >= 0.88) {
+      if (crop.seedType.maxPlantHeightTiles >= 3 && ty - 2 >= 1) {
+        candidateTiles.add((tx, ty - 2));
+      }
+      if (crop.seedType.maxPlantWidthTiles >= 3) {
+        if (crop.seedType == ItemType.bananaSeeds ||
+            crop.seedType == ItemType.mangoSeeds) {
+          if (ty - 1 >= 1) {
+            candidateTiles.add((tx - 1, ty - 1));
+            candidateTiles.add((tx + 1, ty - 1));
+          }
+        } else {
+          // Spreading brambles & thorny briar thickets expand horizontally along the ground!
+          for (final sideX in [tx - 1, tx + 1]) {
+            if (getBlock(sideX, ty + 1).isSolid &&
+                !crops.containsKey('$sideX,$ty')) {
+              candidateTiles.add((sideX, ty));
+              if (crop.seedType == ItemType.thornVineSeeds &&
+                  crop.growthProgress >= 0.96 &&
+                  ty - 1 >= 1) {
+                candidateTiles.add((sideX, ty - 1));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    for (final (gx, gy) in candidateTiles) {
+      if (gy < 1 || gy >= height) continue;
+      if (_doesPlayerOverlapTile(gx, gy)) continue;
+      final existing = getBlock(gx, gy);
+      if (existing == BlockType.air) {
+        blocks[gy][gx] = plantBlock;
+        crop.overgrownTiles.add((gx, gy));
+      } else if (existing == plantBlock) {
+        crop.overgrownTiles.add((gx, gy));
+      }
+    }
+  }
+
+  void _clearCropOvergrowthBlocks(CropPlot crop) {
+    for (final (gx, gy) in crop.overgrownTiles) {
+      if (gy >= 0 && gy < height) {
+        final b = getBlock(gx, gy);
+        if (b.isOvergrownPlant) {
+          blocks[gy][gx] = BlockType.air;
+        }
+      }
+    }
+    crop.overgrownTiles.clear();
+  }
+
+  /// Chops down an overgrown multi-tile plant (or standalone
+  /// [BlockType.overgrownStalk] / [BlockType.thornyBriar] block) at ([tx], [ty]),
+  /// clearing all of its obstructing tiles so the explorer can pass and
+  /// dropping plant fibers, thatch, logs, and seeds.
+  bool chopOvergrownPlantAt(int tx, int ty) {
+    final block = getBlock(tx, ty);
+    final crop = findCropOccupyingTile(tx, ty);
+    if (!block.isOvergrownPlant && crop == null) return false;
+
+    swingAnimationTimer = 0.22;
+    if (crop != null) {
+      final key = '${crop.tileX},${crop.tileY}';
+      if (crop.isMature && crop.seedType != ItemType.thornVineSeeds) {
+        _harvestMatureCrop(key, crop);
+      }
+      _clearCropOvergrowthBlocks(crop);
+      crops.remove(key);
+      addItem(ItemType.vineFiber, 2);
+      addItem(ItemType.thatchBundle, 1);
+      addItem(crop.seedType, 1);
+      if (crop.seedType == ItemType.mangoSeeds ||
+          crop.seedType == ItemType.bananaSeeds ||
+          crop.seedType == ItemType.mahoganySapling) {
+        addItem(ItemType.woodLogItem, 1);
+      }
+      emitSound(
+        SoundCue.harvestCrop,
+        worldX: tx * tileSize + tileSize * 0.5,
+        worldY: ty * tileSize + tileSize * 0.5,
+      );
+      setBanner(
+        '🪓 Chopped down overgrown ${crop.seedType.icon} ${crop.seedType.label} (+2 🪢 Vine Fiber, +1 🍃 Thatch & Seed)! Path cleared!',
+      );
+      return true;
+    }
+
+    blocks[ty][tx] = BlockType.air;
+    addItem(ItemType.vineFiber, 2);
+    addItem(ItemType.thatchBundle, 1);
+    setBanner(
+      '🪓 Chopped through ${block.label} (+2 🪢 Vine Fiber, +1 🍃 Thatch)!',
+    );
+    return true;
+  }
+
   void _growSaplingIntoMahoganyTree(int tx, int ty) {
+    if (crops['$tx,$ty'] case final sapling?) {
+      _clearCropOvergrowthBlocks(sapling);
+    }
     crops.remove('$tx,$ty');
     if (ty + 1 < height) {
       blocks[ty + 1][tx] = BlockType.grass;
@@ -2258,7 +2418,9 @@ final class JungleWorld {
     // grown Mahogany Tree bridges the vertical gap to Floating Sky Sanctuaries!
     final trunkHeight = 7;
     for (int y = ty; y >= ty - trunkHeight + 1 && y >= 2; y--) {
-      if (blocks[y][tx] == BlockType.air || blocks[y][tx] == BlockType.leaves) {
+      if (blocks[y][tx] == BlockType.air ||
+          blocks[y][tx] == BlockType.leaves ||
+          blocks[y][tx].isOvergrownPlant) {
         blocks[y][tx] = BlockType.woodLog;
       }
     }
@@ -2657,13 +2819,16 @@ final class JungleWorld {
       return;
     }
 
-    final cropKey = '$tx,$ty';
-    if (crops[cropKey]?.isMature == true) {
+    final block = getBlock(tx, ty);
+    final occupyingCrop = findCropOccupyingTile(tx, ty);
+    if (occupyingCrop != null &&
+        occupyingCrop.isMature &&
+        occupyingCrop.seedType != ItemType.thornVineSeeds &&
+        equippedItem != ItemType.ironMachete) {
       interactOrPlaceAt(tx, ty);
       return;
     }
 
-    final block = getBlock(tx, ty);
     if (block == BlockType.jungleShrine) {
       socketShardsIntoShrine();
       miningTarget = null;
@@ -2715,12 +2880,32 @@ final class JungleWorld {
       miningProgress = 0.0;
     }
 
-    final speed = equippedItem.miningSpeedMultiplier;
+    final baseSpeed = equippedItem.miningSpeedMultiplier;
+    final isChopBonusBlock =
+        block.isOvergrownPlant ||
+        block == BlockType.woodLog ||
+        block == BlockType.leaves ||
+        block == BlockType.vine ||
+        block == BlockType.berryBush;
+    final chopMultiplier =
+        isChopBonusBlock &&
+                (equippedItem == ItemType.ironMachete ||
+                    equippedItem == ItemType.woodSpear)
+            ? 2.2
+            : 1.0;
+    final speed = baseSpeed * chopMultiplier;
     miningProgress += (dt * speed) / math.max(0.15, block.hardness);
     if (miningProgress >= 1.0) {
-      _harvestBlockDrop(tx, ty, block);
-      blocks[ty][tx] = BlockType.air;
-      crops.remove('$tx,${ty - 1}');
+      if (block.isOvergrownPlant) {
+        chopOvergrownPlantAt(tx, ty);
+      } else {
+        _harvestBlockDrop(tx, ty, block);
+        blocks[ty][tx] = BlockType.air;
+        if (crops['$tx,${ty - 1}'] case final aboveCrop?) {
+          _clearCropOvergrowthBlocks(aboveCrop);
+          crops.remove('$tx,${ty - 1}');
+        }
+      }
       miningTarget = null;
       miningProgress = 0.0;
     }
@@ -2862,6 +3047,8 @@ final class JungleWorld {
       case BlockType.wildfire:
       case BlockType.villageHutBlock:
       case BlockType.jungleShrine:
+      case BlockType.overgrownStalk:
+      case BlockType.thornyBriar:
         break;
     }
   }
@@ -2977,11 +3164,12 @@ final class JungleWorld {
             final ny = y + dy;
             final nb = blocks[ny][nx];
             if (nb.flammability <= 0) continue;
-            // Campfires only ignite immediately adjacent foliage (leaves/vines/bushes).
+            // Campfires only ignite immediately adjacent foliage (leaves/vines/bushes/overgrowth).
             if (b == BlockType.campfire &&
                 nb != BlockType.leaves &&
                 nb != BlockType.vine &&
-                nb != BlockType.berryBush) {
+                nb != BlockType.berryBush &&
+                !nb.isOvergrownPlant) {
               continue;
             }
             final spreadChance =
@@ -3312,6 +3500,10 @@ final class JungleWorld {
         }
       }
 
+      // Expand multi-tile physical stalks/thickets into the world grid as the
+      // plant grows large (>= 0.65), physically blocking movement until chopped!
+      _syncCropOvergrowthBlocks(crop);
+
       if (crop.isMature && crop.seedType == ItemType.mahoganySapling) {
         maturedSaplings.add((crop.tileX, crop.tileY));
       }
@@ -3524,6 +3716,24 @@ final class JungleWorld {
         playerY -= tileSize;
       } else {
         playerVx = 0.0;
+        final blockedTx = pixelToTile(
+          nextX + (playerFacingRight ? 10.0 : -10.0),
+        );
+        final blockedFootBlock = getBlock(blockedTx, (playerY - 6) ~/ tileSize);
+        final blockedTorsoBlock = getBlock(blockedTx, playerTileY);
+        if (blockedFootBlock.isOvergrownPlant ||
+            blockedTorsoBlock.isOvergrownPlant) {
+          if (statusBannerTimer <= 0) {
+            final isBriar =
+                blockedFootBlock == BlockType.thornyBriar ||
+                blockedTorsoBlock == BlockType.thornyBriar;
+            setBanner(
+              isBriar
+                  ? '🌵 Blocked by overgrown Thorny Briar! Hold/tap with 🪓 Axe or 🗡️ Machete to chop a path!'
+                  : '🌿 Overgrown plant stalks block the way! Hold/tap with 🪓 Axe or 🗡️ Machete to chop down!',
+            );
+          }
+        }
       }
     }
 
@@ -4372,15 +4582,24 @@ final class JungleWorld {
       final bodyTy = pixelToTile(a.y - 10).clamp(0, height - 1);
 
       final frontBlock = getBlock(frontTx, bodyTy);
-      if (!frontBlock.isSolid) {
+      if (!frontBlock.isSolid ||
+          (a.type == AnimalType.capuchinMonkey &&
+              frontBlock == BlockType.overgrownStalk)) {
         a.x = nextX;
       } else if (frontBlock != BlockType.doorClosed &&
           frontBlock != BlockType.woodPlank &&
           frontBlock != BlockType.villageHutBlock &&
+          !frontBlock.isOvergrownPlant &&
           !getBlock(frontTx, bodyTy - 1).isSolid) {
         a.x = nextX;
         a.y -= tileSize;
       } else {
+        if (frontBlock == BlockType.thornyBriar &&
+            (a.type == AnimalType.jaguar || a.type == AnimalType.snake)) {
+          a.health -= 6.0 * dt;
+          a.hurtFlashTimer = 0.2;
+          a.showBadge('🌵 Pricked!');
+        }
         a.facingRight = !a.facingRight;
       }
 
