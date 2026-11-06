@@ -639,6 +639,126 @@ void main() {
         expect(totalDistanceSwum, greaterThan(180.0));
       },
     );
+
+    test(
+      'enforces Vertical Metroidvania tool & ecological gates (Abyss Vault, Marsh Miasma, Sky Sanctuary) and awakens the Jungle Shrine',
+      () {
+        final world = JungleWorld.generate(seed: 42);
+        world.animals.clear();
+
+        // 1. Starter inventory is lean (no free Torch, Spear, Bucket, or Totem Shards).
+        expect(world.inventory[ItemType.torchItem] ?? 0, 0);
+        expect(world.inventory[ItemType.woodSpear] ?? 0, 0);
+        expect(world.inventory[ItemType.waterBucket] ?? 0, 0);
+        expect(world.shrineAwakened, isFalse);
+
+        // 2. Tool Gate: Wood Pickaxe cannot mine Iron Ore or Ancient Obsidian,
+        // whereas Stone/Iron Pickaxe succeeds.
+        world.selectedHotbarIndex = 0; // Wood Pickaxe
+        expect(world.canMineBlock(BlockType.ironOre), isFalse);
+        expect(world.canMineBlock(BlockType.ancientObsidian), isFalse);
+
+        final obsTx = world.playerTileX + 1;
+        final obsTy = world.playerTileY;
+        world.blocks[obsTy][obsTx] = BlockType.ancientObsidian;
+        expect(world.interactOrPlaceAt(obsTx, obsTy), isFalse);
+        expect(world.getBlock(obsTx, obsTy), BlockType.ancientObsidian);
+
+        // Craft / equip Stone Pickaxe -> breaches Ancient Obsidian!
+        world.addItem(ItemType.stonePickaxe, 1);
+        world.hotbar[0] = ItemType.stonePickaxe;
+        expect(world.canMineBlock(BlockType.ironOre), isTrue);
+        expect(world.canMineBlock(BlockType.ancientObsidian), isTrue);
+        expect(world.interactOrPlaceAt(obsTx, obsTy), isTrue);
+        expect(world.getBlock(obsTx, obsTy), BlockType.air);
+
+        // 3. Ecological Gate 1 — Pitch-Black Abyss (y >= 31): drains warmth & health
+        // without light, and stops draining when a Torch or Glow-Bulb is present.
+        world.playerX = 24 * JungleWorld.tileSize;
+        world.playerY = 36 * JungleWorld.tileSize;
+        world.blocks[35][24] = BlockType.air;
+        world.blocks[36][24] = BlockType.air;
+        world.blocks[37][24] = BlockType.stone;
+        expect(world.hasAbyssLightAt(24, 36), isFalse);
+        final healthBeforeAbyss = world.health;
+        world.update(0.05);
+        expect(world.health, lessThan(healthBeforeAbyss));
+
+        // Place a Torch adjacent in the Abyss -> light protects explorer!
+        world.blocks[36][25] = BlockType.torch;
+        expect(world.hasAbyssLightAt(24, 36), isTrue);
+
+        // 4. Ecological Gate 2 — Toxic Marsh Miasma: drains health near Marsh Pedestal
+        // unless Medicinal Herb or Pitcher Plant is grown within 6 tiles.
+        final marshPedestalTx = 88;
+        final marshPedestalTy = 20;
+        world.blocks[marshPedestalTy][marshPedestalTx] =
+            BlockType.totemPedestal;
+        world.blocks[marshPedestalTy + 1][marshPedestalTx] = BlockType.peatBog;
+        world.playerX = (marshPedestalTx - 1) * JungleWorld.tileSize;
+        world.playerY = marshPedestalTy * JungleWorld.tileSize;
+        expect(
+          world.isInToxicMarshMiasma(marshPedestalTx - 1, marshPedestalTy),
+          isTrue,
+        );
+        expect(
+          world.hasMarshMiasmaProtection(marshPedestalTx - 1, marshPedestalTy),
+          isFalse,
+        );
+        world.health = 90.0;
+        world.update(0.05);
+        expect(world.health, lessThan(90.0));
+
+        // Sow and mature a Medicinal Herb 2 tiles away -> purifies the Marsh Miasma!
+        world.blocks[marshPedestalTy][marshPedestalTx - 2] = BlockType.air;
+        world.blocks[marshPedestalTy + 1][marshPedestalTx - 2] =
+            BlockType.peatBog;
+        world.addItem(ItemType.healingHerbSeeds, 2);
+        expect(
+          world.sowSeedAt(
+            marshPedestalTx - 2,
+            marshPedestalTy,
+            ItemType.healingHerbSeeds,
+          ),
+          isTrue,
+        );
+        world.crops['${marshPedestalTx - 2},$marshPedestalTy']!.growthProgress =
+            0.8;
+        expect(
+          world.hasMarshMiasmaProtection(marshPedestalTx - 1, marshPedestalTy),
+          isTrue,
+        );
+
+        // 5. Claim all 3 Totem Pedestals (Sky, Marsh, Abyss) and socket them into
+        // the Ancient Jungle Shrine at X=31 to awaken the shrine!
+        expect(
+          world.claimTotemPedestalAt(marshPedestalTx, marshPedestalTy),
+          isTrue,
+        );
+        expect(world.inventory[ItemType.marshTotemShard], 1);
+
+        // Sky Sanctuary Pedestal at (tx=22, ty=7) and Abyss Vault Pedestal at (tx=24, ty=40).
+        expect(world.getBlock(22, 7), BlockType.totemPedestal);
+        expect(world.claimTotemPedestalAt(22, 7), isTrue);
+        expect(world.inventory[ItemType.skyTotemShard], 1);
+
+        expect(world.getBlock(24, 40), BlockType.totemPedestal);
+        expect(world.claimTotemPedestalAt(24, 40), isTrue);
+        expect(world.inventory[ItemType.abyssTotemShard], 1);
+
+        // Return to the Ancient Jungle Shrine beside starter camp (tx=31) and socket all 3 shards!
+        final shrineSurface = world.surfaceElevationAt(31) - 1;
+        expect(world.getBlock(31, shrineSurface), BlockType.jungleShrine);
+        world.playerX = 30 * JungleWorld.tileSize;
+        world.playerY = shrineSurface * JungleWorld.tileSize;
+        expect(world.interactOrPlaceAt(31, shrineSurface), isTrue);
+        expect(world.socketedTotemShards.length, 3);
+        expect(world.shrineAwakened, isTrue);
+        expect(world.skyBlessingActive, isTrue);
+        expect(world.marshBlessingActive, isTrue);
+        expect(world.abyssBlessingActive, isTrue);
+      },
+    );
   });
 
   testWidgets(

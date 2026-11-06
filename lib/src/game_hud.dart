@@ -290,6 +290,17 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                 onPressed: _openJournalModal,
               ),
               _HudChipButton(
+                label:
+                    _world.shrineAwakened
+                        ? '🗿 Shrine: AWAKENED! (3/3)'
+                        : '🗿 Shrine (${_world.socketedTotemShards.length}/3)',
+                color:
+                    _world.shrineAwakened
+                        ? const Color(0xFF00897B)
+                        : const Color(0xFF6A1B9A),
+                onPressed: _openJournalModal,
+              ),
+              _HudChipButton(
                 label: _showMobileControls ? '📱 Pad: ON' : '📱 Pad: OFF',
                 color: const Color(0xFF37474F),
                 onPressed: () {
@@ -1316,7 +1327,37 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) {
+        final totemGates = [
+          (
+            '☀️ Sky Canopy Totem Shard (Floating Cloud Sanctuary, Y=7..8)',
+            'Hanging vines stop 9 tiles above the ground! Find & plant a 🌳 Mahogany Sapling beneath the sanctuary (or grow a vine trellis) to climb into the clouds.',
+            _world.socketedTotemShards.contains(ItemType.skyTotemShard) ||
+                (_world.inventory[ItemType.skyTotemShard] ?? 0) > 0,
+            _world.skyBlessingActive,
+            'Canopy Blessing: +20% jump & vine-climbing agility',
+          ),
+          (
+            '🐍 Venom Marsh Totem Shard (Botanical Marsh Altar)',
+            'Choking green Marsh Miasma drains -4.2 HP/s! Plant 🌿 Medicinal Herbs or 🌺 Pitcher Plants within 6 tiles (or carry Poultices / Nectar) to purify the toxic mist.',
+            _world.socketedTotemShards.contains(ItemType.marshTotemShard) ||
+                (_world.inventory[ItemType.marshTotemShard] ?? 0) > 0,
+            _world.marshBlessingActive,
+            'Venom Ward: Permanent immunity to Marsh Miasma & +50% crop growth',
+          ),
+          (
+            '🔮 Deep Abyss Totem Shard (Obsidian Caverns, Y=38..42)',
+            'Pitch-black caverns drain warmth & life without 🕯️ Torches, 🔥 Campfires, or 💡 Glow-Bulbs! Craft a ⚒️ Stone or ⛏️ Iron Pickaxe to breach the Ancient Obsidian Vault.',
+            _world.socketedTotemShards.contains(ItemType.abyssTotemShard) ||
+                (_world.inventory[ItemType.abyssTotemShard] ?? 0) > 0,
+            _world.abyssBlessingActive,
+            'Subterranean Sight: Immunity to Pitch-Black Abyss darkness & +40% mining speed',
+          ),
+        ];
         final milestones = [
+          (
+            '🗿 Awaken the Ancient Jungle Shrine at X=31 (${_world.socketedTotemShards.length}/3 Totem Shards socketed)',
+            _world.shrineAwakened,
+          ),
           (
             '🌱 Gather Wild Seeds from Bushes, Vines, or Grass',
             _world.milestoneGatheredSeeds,
@@ -1360,14 +1401,100 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
         ];
         return AlertDialog(
           backgroundColor: const Color(0xFF182228),
-          title: const Text(
-            '📓 Explorer Survival Journal & Ecology Guide',
-            style: TextStyle(color: Colors.white),
+          title: Text(
+            _world.shrineAwakened
+                ? '🗿 Ancient Jungle Shrine: AWAKENED! (3/3 Shards)'
+                : '🗿 Shrine Quest (${_world.socketedTotemShards.length}/3 Shards) & Explorer Journal',
+            style: const TextStyle(color: Colors.white),
           ),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text(
+                  'Delve Deeper, Climb Higher — 3 Ancient Totem Gates:',
+                  style: TextStyle(
+                    color: Colors.cyanAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                for (final (title, hint, claimed, socketed, blessing)
+                    in totemGates)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color:
+                          socketed
+                              ? const Color(0xFF1B3B2B)
+                              : const Color(0xFF22303A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color:
+                            socketed
+                                ? Colors.lightGreenAccent
+                                : (claimed
+                                    ? Colors.amberAccent
+                                    : Colors.white24),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              socketed
+                                  ? Icons.verified
+                                  : (claimed
+                                      ? Icons.auto_awesome
+                                      : Icons.lock_outline),
+                              color:
+                                  socketed
+                                      ? Colors.lightGreenAccent
+                                      : (claimed
+                                          ? Colors.amberAccent
+                                          : Colors.white54),
+                              size: 18,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          hint,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '✨ $blessing',
+                          style: TextStyle(
+                            color:
+                                socketed
+                                    ? Colors.lightGreenAccent
+                                    : Colors.amberAccent,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const Divider(color: Colors.white24, height: 18),
                 const Text(
                   'Explorer Milestones:',
                   style: TextStyle(
@@ -1412,8 +1539,8 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  '• Tap "🌱 Seeds" (or press R) to choose from 8 seed varieties: Berry, Banana, Mango, Medicinal Herb (repels 🐍 Vipers), Glow-Bulb (night light & calms 🐝 Bees), Briar Thorn (pricks 🐆 Jaguars), Pitcher Plant (traps snakes & fertilizes crops), and Mahogany Sapling (grows full trees).\n'
-                  '• Tap a 🐒 Capuchin Monkey or 🦜 Rainbow Toucan (or tap "🐒 Feed") while carrying fruit to befriend monkeys into crop-harvesting helpers!\n'
+                  '• Tap "🌱 Seeds" (or press R) to choose from 8 seed varieties: Berry, Banana, Mango, Medicinal Herb (repels 🐍 Vipers & purifies Marsh Miasma), Glow-Bulb (cave/night light & calms 🐝 Bees), Briar Thorn (pricks 🐆 Jaguars), Pitcher Plant (traps snakes & fertilizes crops), and Mahogany Sapling (grows full canopy trees to reach Floating Sky Sanctuaries).\n'
+                  '• Tap the 🗿 Ancient Jungle Shrine beside your camp (X=31) to socket Totem Shards and awaken the jungle canopy!\n'
                   '• Desktop Keys: A/D Move, W/Space Jump/Swim/Climb, R Cycle Seed, E Eat, F Fish, Q Attack.',
                   style: TextStyle(color: Colors.white70, fontSize: 12.5),
                 ),

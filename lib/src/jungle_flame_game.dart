@@ -1472,6 +1472,191 @@ final class JungleSurvivalGame extends FlameGame
         canvas.drawCircle(Offset(left + 20, top + 16), 2.6, accent);
       case BlockType.doorOpen:
         canvas.drawRect(Rect.fromLTWH(left + 2, top, 7, s), fill);
+
+      case BlockType.ancientObsidian:
+        canvas.drawRect(
+          rect,
+          Paint()
+            ..shader =
+                Gradient.linear(Offset(left, top), Offset(left + s, top + s), [
+                  const Color(0xFF211333),
+                  const Color(0xFF12081F),
+                  const Color(0xFF311B92),
+                ]),
+        );
+        final pulse = 0.55 + 0.45 * math.sin(_animTime * 3.2 + h * 0.4);
+        final runePaint =
+            Paint()
+              ..color = Color.fromARGB(
+                (150 + 95 * pulse).round().clamp(0, 255),
+                179,
+                136,
+                255,
+              )
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.6;
+        canvas.drawRect(rect.deflate(2.5), runePaint);
+        canvas.drawLine(
+          Offset(left + 7, top + 8),
+          Offset(left + s - 7, top + s - 8),
+          runePaint,
+        );
+        canvas.drawCircle(
+          Offset(left + s * 0.5, top + s * 0.5),
+          3.2,
+          Paint()..color = const Color(0xFFE040FB).withValues(alpha: pulse),
+        );
+
+      case BlockType.cloudStone:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect.deflate(0.8), const Radius.circular(4)),
+          Paint()
+            ..shader = Gradient.linear(
+              Offset(left, top),
+              Offset(left, top + s),
+              [const Color(0xFFF5FDFF), const Color(0xFFB2EBF2)],
+            ),
+        );
+        canvas.drawRect(
+          Rect.fromLTWH(left + 2, top + 2, s - 4, 4),
+          Paint()..color = const Color(0xFFFFD54F),
+        );
+        canvas.drawLine(
+          Offset(left + 4, top + s * 0.55),
+          Offset(left + s - 4, top + s * 0.55),
+          Paint()
+            ..color = const Color(0xFF00ACC1)
+            ..strokeWidth = 1.5,
+        );
+
+      case BlockType.totemPedestal:
+        // Carved stone altar base.
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(left + 3, top + 14, s - 6, s - 14),
+            const Radius.circular(3),
+          ),
+          Paint()..color = const Color(0xFF37474F),
+        );
+        canvas.drawRect(
+          Rect.fromLTWH(left + 1, top + 12, s - 2, 5),
+          Paint()..color = const Color(0xFFFFCA28),
+        );
+        final shard = worldState.totemShardForPedestalAt(tx, ty);
+        final bob = math.sin(_animTime * 3.8 + tx) * 3.0;
+        final orbCenter = Offset(left + s * 0.5, top + 3.0 + bob);
+        final orbColor = switch (shard) {
+          ItemType.skyTotemShard => const Color(0xFF40C4FF),
+          ItemType.marshTotemShard => const Color(0xFF69F0AE),
+          ItemType.abyssTotemShard => const Color(0xFFE040FB),
+          _ => const Color(0xFFFFD54F),
+        };
+        canvas.drawCircle(
+          orbCenter,
+          12.0,
+          Paint()
+            ..shader = Gradient.radial(orbCenter, 12.0, [
+              orbColor.withValues(alpha: 0.78),
+              orbColor.withValues(alpha: 0.0),
+            ]),
+        );
+        final diamond =
+            Path()
+              ..moveTo(orbCenter.dx, orbCenter.dy - 7.5)
+              ..lineTo(orbCenter.dx + 6.0, orbCenter.dy)
+              ..lineTo(orbCenter.dx, orbCenter.dy + 7.5)
+              ..lineTo(orbCenter.dx - 6.0, orbCenter.dy)
+              ..close();
+        canvas.drawPath(diamond, Paint()..color = orbColor);
+        canvas.drawPath(
+          diamond,
+          Paint()
+            ..color = Colors.white
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2,
+        );
+        // If this is the Marsh Totem Pedestal (surface level), render toxic green miasma mist around it!
+        if (shard == ItemType.marshTotemShard) {
+          for (int m = -3; m <= 3; m++) {
+            final mx =
+                left + s * 0.5 + m * 24.0 + math.sin(_animTime * 1.8 + m) * 8.0;
+            final my = top + 8.0 + math.cos(_animTime * 2.2 + m * 1.4) * 6.0;
+            canvas.drawCircle(
+              Offset(mx, my),
+              18.0,
+              Paint()
+                ..shader = Gradient.radial(Offset(mx, my), 18.0, [
+                  const Color(0x5576FF03),
+                  const Color(0x0076FF03),
+                ]),
+            );
+          }
+        }
+
+      case BlockType.jungleShrine:
+        final awakened = worldState.shrineAwakened;
+        if (awakened) {
+          // Golden-emerald sky beam shooting into the canopy!
+          canvas.drawRect(
+            Rect.fromLTWH(left + 4, top - 320, s - 8, 320 + s),
+            Paint()
+              ..shader = Gradient.linear(
+                Offset(left + s * 0.5, top),
+                Offset(left + s * 0.5, top - 320),
+                [const Color(0x8800E676), const Color(0x00FFD54F)],
+              ),
+          );
+        }
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(left + 2, top - 10, s - 4, s + 10),
+            const Radius.circular(5),
+          ),
+          Paint()
+            ..shader = Gradient.linear(
+              Offset(left, top - 10),
+              Offset(left, top + s),
+              [const Color(0xFF455A64), const Color(0xFF263238)],
+            ),
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(left + 4, top - 8, s - 8, s + 6),
+            const Radius.circular(4),
+          ),
+          Paint()
+            ..color =
+                awakened ? const Color(0xFF00E676) : const Color(0xFFFFB300)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.8,
+        );
+        // 3 Totem Shard sockets along the shrine obelisk.
+        final sockets = [
+          (
+            ItemType.skyTotemShard,
+            Offset(left + s * 0.5, top - 1),
+            const Color(0xFF40C4FF),
+          ),
+          (
+            ItemType.marshTotemShard,
+            Offset(left + s * 0.32, top + 13),
+            const Color(0xFF69F0AE),
+          ),
+          (
+            ItemType.abyssTotemShard,
+            Offset(left + s * 0.68, top + 13),
+            const Color(0xFFE040FB),
+          ),
+        ];
+        for (final (shardItem, pos, activeColor) in sockets) {
+          final isLit = worldState.socketedTotemShards.contains(shardItem);
+          canvas.drawCircle(
+            pos,
+            4.2,
+            Paint()..color = isLit ? activeColor : const Color(0xFF1C262B),
+          );
+        }
+
       default:
         canvas.drawRect(rect, fill);
         canvas.drawRect(
@@ -3695,6 +3880,7 @@ final class JungleSurvivalGame extends FlameGame
     switch (item) {
       case ItemType.woodPickaxe:
       case ItemType.stonePickaxe:
+      case ItemType.ironPickaxe:
         canvas.drawLine(
           Offset.zero,
           Offset(dir * 11, -11),
@@ -3703,10 +3889,11 @@ final class JungleSurvivalGame extends FlameGame
             ..strokeWidth = 2.8
             ..strokeCap = StrokeCap.round,
         );
-        final headColor =
-            item == ItemType.stonePickaxe
-                ? const Color(0xFFCFD8DC)
-                : const Color(0xFF8D6E63);
+        final headColor = switch (item) {
+          ItemType.ironPickaxe => const Color(0xFF40C4FF),
+          ItemType.stonePickaxe => const Color(0xFFCFD8DC),
+          _ => const Color(0xFF8D6E63),
+        };
         canvas.drawLine(
           Offset(dir * 6, -14),
           Offset(dir * 15, -7),
@@ -3902,7 +4089,9 @@ final class JungleSurvivalGame extends FlameGame
     double viewH,
     Offset cam,
   ) {
-    if (!worldState.isNight) return;
+    final inDeepAbyss =
+        worldState.playerTileY >= 29 && !worldState.abyssBlessingActive;
+    if (!worldState.isNight && !inDeepAbyss) return;
     final playerScreen = Offset(
       worldState.playerX - cam.dx,
       worldState.playerY - 16.0 - cam.dy,
@@ -3912,20 +4101,28 @@ final class JungleSurvivalGame extends FlameGame
       worldState.playerTileY,
     );
     final holdingTorch = worldState.equippedItem == ItemType.torchItem;
+    final hasAbyssLight = worldState.hasAbyssLightAt(
+      worldState.playerTileX,
+      worldState.playerTileY,
+    );
     final lightRadius =
         shelter.nearCampfire
             ? 210.0
-            : ((shelter.nearTorch || holdingTorch) ? 165.0 : 115.0);
+            : ((shelter.nearTorch || holdingTorch || hasAbyssLight)
+                ? 175.0
+                : (inDeepAbyss ? 68.0 : 115.0));
+    final darknessColor =
+        inDeepAbyss ? const Color(0xDD03020B) : const Color(0xAA040814);
 
     final nightPaint =
         Paint()
           ..shader = Gradient.radial(playerScreen, lightRadius, [
             const Color(0x00000000),
-            const Color(0xAA040814),
+            darknessColor,
           ]);
     canvas.drawRect(Rect.fromLTWH(0, 0, viewW, viewH), nightPaint);
 
-    // Bioluminescent Glow-Bulb crops radiate soft cyan-lime halos at night!
+    // Bioluminescent Glow-Bulb crops radiate soft cyan-lime halos at night or in caves!
     for (final crop in worldState.crops.values) {
       if (crop.seedType == ItemType.glowBulbSeeds &&
           crop.growthProgress >= 0.33) {

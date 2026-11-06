@@ -115,22 +115,18 @@ final class JungleWorld {
       ),
     );
 
-    // Starter explorer kit so the player can immediately mine, defend, fish,
-    // use smoke on beehives, pour/scoop water, and experiment with sowing
-    // diverse jungle seeds and interacting with wildlife.
+    // Lean starter survival kit: begin with only a crude Wood Pickaxe, a
+    // starter seed pouch, and light rations. Weapons, torches, water buckets,
+    // stone/iron pickaxes, glow-bulbs, and mahogany saplings must be foraged,
+    // grown, or crafted to unlock the 3 danger zones and awaken the Shrine!
     inventory[ItemType.woodPickaxe] = 1;
-    inventory[ItemType.woodSpear] = 1;
-    inventory[ItemType.berrySeeds] = 4;
-    inventory[ItemType.bananaSeeds] = 2;
-    inventory[ItemType.healingHerbSeeds] = 2;
-    inventory[ItemType.thornVineSeeds] = 2;
-    inventory[ItemType.glowBulbSeeds] = 2;
+    inventory[ItemType.berrySeeds] = 3;
+    inventory[ItemType.bananaSeeds] = 1;
+    inventory[ItemType.healingHerbSeeds] = 1;
+    inventory[ItemType.thornVineSeeds] = 1;
     inventory[ItemType.pitcherPlantSeeds] = 1;
-    inventory[ItemType.mahoganySapling] = 1;
-    inventory[ItemType.jungleBerry] = 3;
-    inventory[ItemType.banana] = 2;
-    inventory[ItemType.torchItem] = 3;
-    inventory[ItemType.waterBucket] = 2;
+    inventory[ItemType.jungleBerry] = 2;
+    inventory[ItemType.banana] = 1;
   }
 
   /// Standard pixel size of a single world grid tile.
@@ -294,7 +290,20 @@ final class JungleWorld {
         ItemType.stoneBlock: 3,
         ItemType.vineFiber: 1,
       },
-      description: 'Fast mining tool for stone, coal, and iron ore veins.',
+      description:
+          'Upgraded stone pickaxe required to mine Iron Ore and breach Ancient Obsidian.',
+    ),
+    CraftingRecipe(
+      output: ItemType.ironPickaxe,
+      outputCount: 1,
+      ingredients: {
+        ItemType.ironOreItem: 2,
+        ItemType.coalItem: 1,
+        ItemType.woodLogItem: 1,
+      },
+      description:
+          'Heavy forged pickaxe that shatters deep Ancient Obsidian vaults (4.8x mining speed).',
+      requiresCampfire: true,
     ),
     CraftingRecipe(
       output: ItemType.ironMachete,
@@ -306,6 +315,13 @@ final class JungleWorld {
       },
       description: 'Heavy jungle blade that deals 38 damage to predators.',
       requiresCampfire: true,
+    ),
+    CraftingRecipe(
+      output: ItemType.healingHerb,
+      outputCount: 2,
+      ingredients: {ItemType.jungleBerry: 2, ItemType.vineFiber: 1},
+      description:
+          'Field poultice (+40 HP) that also protects against Toxic Viper Marsh Miasma.',
     ),
     CraftingRecipe(
       output: ItemType.warmPoncho,
@@ -617,6 +633,7 @@ final class JungleWorld {
         _populateVillageChunk(chunkIndex, chunkStart, surfaceY);
       case JungleBiome.riverLagoon:
         _populateRiverLagoonChunk(chunkIndex, chunkStart, surfaceY, chunkRng);
+        _buildAbyssObsidianVaultInChunk(chunkStart);
       case JungleBiome.botanicalClearing:
         _populateBotanicalClearingChunk(
           chunkIndex,
@@ -633,7 +650,52 @@ final class JungleWorld {
           biome,
           chunkRng,
         );
+        if (biome == JungleBiome.mistHighlands) {
+          _buildAbyssObsidianVaultInChunk(chunkStart);
+        }
     }
+  }
+
+  /// Carves a subterranean Ancient Obsidian Vault deep in the Pitch-Black Abyss
+  /// (`y = 38..42`) housing the `🔮 Deep Abyss Totem Shard` pedestal.
+  void _buildAbyssObsidianVaultInChunk(int chunkStart) {
+    const vaultTop = 38;
+    const vaultBottom = 42;
+    final leftX = chunkStart + 5;
+    final rightX = chunkStart + 11;
+    for (int y = vaultTop; y <= vaultBottom; y++) {
+      for (int x = leftX; x <= rightX; x++) {
+        final isBorder =
+            y == vaultTop || y == vaultBottom || x == leftX || x == rightX;
+        if (y == vaultBottom && x > leftX && x < rightX) {
+          _setBlockRaw(x, y, BlockType.peatBog);
+        } else if (isBorder) {
+          _setBlockRaw(x, y, BlockType.ancientObsidian);
+        } else {
+          _setBlockRaw(x, y, BlockType.air);
+        }
+      }
+    }
+    _setBlockRaw(chunkStart + 8, vaultBottom - 1, BlockType.totemPedestal);
+  }
+
+  /// Builds a high-altitude Floating Sky Sanctuary (`y = 7..8`) above the
+  /// forest canopy housing the `☀️ Sky Canopy Totem Shard` pedestal.
+  void _buildFloatingSkySanctuaryInChunk(int centerTx) {
+    const islandY = 8;
+    for (int dx = -2; dx <= 2; dx++) {
+      final x = centerTx + dx;
+      _setBlockRaw(x, islandY, BlockType.cloudStone);
+      _setBlockRaw(x, islandY - 1, BlockType.air);
+      if (dx.abs() == 2) {
+        // Hanging sky-vines descend to y = 12 (9 tiles above the ground at y = 21,
+        // requiring a grown Mahogany Tree or vine trellis below to bridge!).
+        for (int vy = islandY + 1; vy <= islandY + 4; vy++) {
+          _setBlockRaw(x, vy, BlockType.vine);
+        }
+      }
+    }
+    _setBlockRaw(centerTx, islandY - 1, BlockType.totemPedestal);
   }
 
   void _setBlockRaw(int tx, int ty, BlockType block) {
@@ -1028,20 +1090,43 @@ final class JungleWorld {
     List<int> surfaceY,
     math.Random chunkRng,
   ) {
-    // One central canopy tree with a wild beehive to pollinate the clearing.
-    if (_getBlockRaw(chunkStart + 8, surfaceY[8]) == BlockType.grass) {
+    // One canopy tree on the left side with a wild beehive to pollinate the clearing.
+    if (_getBlockRaw(chunkStart + 4, surfaceY[4]).isSowableSoil) {
       _buildCanopyTreeInChunk(
-        trunkX: chunkStart + 8,
-        groundY: surfaceY[8],
+        trunkX: chunkStart + 4,
+        groundY: surfaceY[4],
         chunkStart: chunkStart,
         chunkRng: chunkRng,
         attachBeehive: true,
       );
     }
 
-    // Spawn wild botanical crops across the sunny clearing so explorers
-    // discover new plant varieties and active plant-animal interactions as they
-    // travel infinitely West or East.
+    // Build the Venom Marsh Altar in the center of the clearing (localX = 7..9):
+    // a Mossy Peat Bog platform holding the `🐍 Venom Marsh Totem Shard` pedestal,
+    // guarded by venomous Emerald Vipers and Toxic Marsh Miasma!
+    final altarY = surfaceY[8];
+    for (int dx = -1; dx <= 1; dx++) {
+      final ax = chunkStart + 8 + dx;
+      _setBlockRaw(ax, altarY, BlockType.peatBog);
+      _setBlockRaw(ax, altarY - 1, BlockType.air);
+    }
+    _setBlockRaw(chunkStart + 8, altarY - 1, BlockType.totemPedestal);
+    animals.addAll([
+      JungleAnimal(
+        type: AnimalType.snake,
+        x: (chunkStart + 7) * tileSize + tileSize * 0.5,
+        y: altarY * tileSize,
+        facingRight: false,
+      ),
+      JungleAnimal(
+        type: AnimalType.snake,
+        x: (chunkStart + 9) * tileSize + tileSize * 0.5,
+        y: altarY * tileSize,
+        facingRight: true,
+      ),
+    ]);
+
+    // Spawn wild botanical crops across the outer clearing edges.
     const clearingSeeds = [
       ItemType.bananaSeeds,
       ItemType.mangoSeeds,
@@ -1051,7 +1136,7 @@ final class JungleWorld {
       ItemType.pitcherPlantSeeds,
       ItemType.berrySeeds,
     ];
-    for (final offset in const [2, 4, 12, 14]) {
+    for (final offset in const [2, 12, 14]) {
       final tx = chunkStart + offset;
       final gy = surfaceY[offset];
       final seed =
@@ -1095,8 +1180,8 @@ final class JungleWorld {
   ) {
     for (final localX in const [4, 11]) {
       final tx = chunkStart + localX;
-      // Leave the immediate starter spawn clearing (tx = 27..30) open.
-      if (tx >= 26 && tx <= 30) continue;
+      // Leave the immediate starter spawn clearing (tx = 26..31) open.
+      if (tx >= 26 && tx <= 31) continue;
       final gy = surfaceY[localX];
       if (_getBlockRaw(tx, gy).isSowableSoil &&
           (chunkIndex == 1 || chunkRng.nextDouble() < 0.82)) {
@@ -1115,7 +1200,7 @@ final class JungleWorld {
     // Scatter wild berry bushes and occasional wild herb/briar sprouts.
     for (int localX = 1; localX < chunkWidth - 1; localX++) {
       final tx = chunkStart + localX;
-      if (tx >= 27 && tx <= 30) continue;
+      if (tx >= 27 && tx <= 31) continue;
       final gy = surfaceY[localX];
       if (!_getBlockRaw(tx, gy).isSowableSoil ||
           _getBlockRaw(tx, gy - 1) != BlockType.air) {
@@ -1133,8 +1218,15 @@ final class JungleWorld {
       }
     }
 
-    // Spawn chunk wildlife (monkeys & toucans near spawn; predators further out).
+    // In the starter valley (chunkIndex == 1), erect the Ancient Jungle Shrine
+    // right beside the spawn clearing (tx = 31) and a Floating Sky Sanctuary
+    // high overhead (tx = 22, y = 7..8)!
     if (chunkIndex == 1) {
+      final shrineY = surfaceY[15];
+      _setBlockRaw(31, shrineY, BlockType.cloudStone);
+      _setBlockRaw(31, shrineY - 1, BlockType.jungleShrine);
+      _buildFloatingSkySanctuaryInChunk(chunkStart + 6);
+
       animals.addAll([
         JungleAnimal(
           type: AnimalType.capuchinMonkey,
@@ -1152,6 +1244,9 @@ final class JungleWorld {
         ),
       ]);
     } else {
+      if (biome == JungleBiome.mistHighlands) {
+        _buildFloatingSkySanctuaryInChunk(chunkStart + 8);
+      }
       final animalRoll = chunkRng.nextDouble();
       final spawnX = (chunkStart + 7) * tileSize;
       final spawnY = (surfaceY[7] - 1) * tileSize;
@@ -1190,6 +1285,37 @@ final class JungleWorld {
 
   /// Distinct seed varieties sowed by the explorer so far.
   final Set<ItemType> sowedSeedVarieties = {};
+
+  /// Ancient Totem Shards (`☀️ Sky`, `🐍 Marsh`, `🔮 Abyss`) socketed into the
+  /// [BlockType.jungleShrine].
+  final Set<ItemType> socketedTotemShards = {};
+
+  /// Vertical tile threshold where the subterranean Pitch-Black Abyss begins.
+  static const int abyssDepthY = 31;
+
+  /// Whether all 3 Ancient Totem Shards have been socketed into the Shrine.
+  bool get shrineAwakened =>
+      socketedTotemShards.length >= ItemType.allTotemShards.length;
+
+  /// Whether the `☀️ Sky Canopy Totem Shard` is socketed in the Shrine.
+  bool get skyBlessingActive =>
+      socketedTotemShards.contains(ItemType.skyTotemShard);
+
+  /// Whether the `🐍 Venom Marsh Totem Shard` is socketed in the Shrine.
+  bool get marshBlessingActive =>
+      socketedTotemShards.contains(ItemType.marshTotemShard);
+
+  /// Whether the `🔮 Deep Abyss Totem Shard` is socketed in the Shrine.
+  bool get abyssBlessingActive =>
+      socketedTotemShards.contains(ItemType.abyssTotemShard);
+
+  /// Number of distinct Totem Shards either socketed or carried in inventory.
+  int get discoveredTotemShardCount =>
+      ItemType.allTotemShards
+          .where(
+            (s) => socketedTotemShards.contains(s) || (inventory[s] ?? 0) > 0,
+          )
+          .length;
 
   /// Remaining burn ticks per `'x,y'` coordinate for [BlockType.wildfire].
   final Map<String, int> _fireBurnTicks = {};
@@ -1920,8 +2046,14 @@ final class JungleWorld {
       return false;
     }
 
-    // 1. Check if tapping a Beehive to harvest Golden Honeycomb!
+    // 1. Check if tapping the Ancient Jungle Shrine, a Totem Pedestal, or a Beehive!
     final block = getBlock(tx, ty);
+    if (block == BlockType.jungleShrine) {
+      return socketShardsIntoShrine();
+    }
+    if (block == BlockType.totemPedestal) {
+      return claimTotemPedestalAt(tx, ty);
+    }
     if (block == BlockType.beehive) {
       return harvestHoneyFromHive(tx, ty);
     }
@@ -2122,7 +2254,9 @@ final class JungleWorld {
     if (ty + 1 < height) {
       blocks[ty + 1][tx] = BlockType.grass;
     }
-    final trunkHeight = 5;
+    // Tall 7-tile Mahogany trunk + canopy crown reaching up to ty - 8 so a
+    // grown Mahogany Tree bridges the vertical gap to Floating Sky Sanctuaries!
+    final trunkHeight = 7;
     for (int y = ty; y >= ty - trunkHeight + 1 && y >= 2; y--) {
       if (blocks[y][tx] == BlockType.air || blocks[y][tx] == BlockType.leaves) {
         blocks[y][tx] = BlockType.woodLog;
@@ -2138,9 +2272,9 @@ final class JungleWorld {
         }
       }
     }
-    for (final vx in [tx - 2, tx + 2]) {
-      for (int vy = topTreeY + 1; vy <= topTreeY + 3 && vy <= ty; vy++) {
-        if (blocks[vy][vx] == BlockType.air) {
+    for (final vx in [tx - 2, tx, tx + 2]) {
+      for (int vy = topTreeY - 1; vy <= topTreeY + 5 && vy <= ty; vy++) {
+        if (vy >= 1 && blocks[vy][vx] == BlockType.air) {
           blocks[vy][vx] = BlockType.vine;
         }
       }
@@ -2164,6 +2298,178 @@ final class JungleWorld {
       }
     }
     milestonePlantAnimalInteraction = true;
+  }
+
+  /// Returns which of the 3 [ItemType.allTotemShards] rests on the pedestal at
+  /// tile coordinates ([tx], [ty]) based on vertical elevation zone.
+  ItemType totemShardForPedestalAt(int tx, int ty) {
+    if (ty <= 12) return ItemType.skyTotemShard;
+    if (ty >= abyssDepthY) return ItemType.abyssTotemShard;
+    return ItemType.marshTotemShard;
+  }
+
+  /// Claims the [BlockType.totemPedestal] at ([tx], [ty]), adding its
+  /// Ancient Totem Shard to the explorer's inventory.
+  bool claimTotemPedestalAt(int tx, int ty) {
+    if (getBlock(tx, ty) != BlockType.totemPedestal) return false;
+    final shard = totemShardForPedestalAt(tx, ty);
+    blocks[ty][tx] = BlockType.air;
+    addItem(shard, 1);
+    emitSound(
+      SoundCue.harvestCrop,
+      worldX: tx * tileSize + tileSize * 0.5,
+      worldY: ty * tileSize + tileSize * 0.5,
+      baseVolume: 1.0,
+    );
+    setBanner(
+      '🏆 Recovered ${shard.icon} ${shard.label} ($discoveredTotemShardCount/3)! Return to the 🗿 Ancient Jungle Shrine (X:31) to socket it!',
+    );
+    return true;
+  }
+
+  /// Sockets any carried [ItemType.allTotemShards] into the Ancient Jungle
+  /// Shrine and triggers the Jungle Awakening when all 3/3 Shards are socketed.
+  bool socketShardsIntoShrine() {
+    final newlySocketed = <ItemType>[];
+    for (final shard in ItemType.allTotemShards) {
+      if ((inventory[shard] ?? 0) > 0 && !socketedTotemShards.contains(shard)) {
+        inventory[shard] = inventory[shard]! - 1;
+        socketedTotemShards.add(shard);
+        newlySocketed.add(shard);
+      }
+    }
+
+    if (newlySocketed.isEmpty) {
+      if (shrineAwakened) {
+        setBanner(
+          '🌟 The Ancient Jungle Shrine is Awakened (3/3 Shards)! Eternal canopy blessing active!',
+        );
+        return true;
+      }
+      final missing = ItemType.allTotemShards
+          .where((s) => !socketedTotemShards.contains(s))
+          .map((s) => '${s.icon} ${s.label}')
+          .join(', ');
+      setBanner(
+        '🗿 Ancient Jungle Shrine (${socketedTotemShards.length}/3 Shards). Still needed: $missing.',
+      );
+      return false;
+    }
+
+    emitSound(SoundCue.harvestCrop, worldX: playerX, worldY: playerY);
+    if (shrineAwakened) {
+      health = 100.0;
+      hunger = 100.0;
+      warmth = 100.0;
+      for (final crop in crops.values) {
+        crop.isPollinated = true;
+        crop.isFertilized = true;
+      }
+      emitSound(SoundCue.toucanScream, worldX: playerX, worldY: playerY - 24.0);
+      setBanner(
+        '🌟 THE ANCIENT JUNGLE SHRINE IS AWAKENED (3/3 Totem Shards)! Eternal canopy & bioluminescent blessings unlocked!',
+      );
+    } else {
+      final names = newlySocketed.map((s) => '${s.icon} ${s.label}').join(', ');
+      setBanner(
+        '🗿 Socketed $names into the Shrine (${socketedTotemShards.length}/3)! Shrine blessing granted!',
+      );
+    }
+    return true;
+  }
+
+  /// Whether the explorer's currently equipped tool is strong enough to mine
+  /// [block].
+  ///
+  /// Enforces tool progression gates:
+  /// - [BlockType.ironOre] requires at least a [ItemType.stonePickaxe],
+  ///   [ItemType.ironPickaxe], or [ItemType.ironMachete].
+  /// - [BlockType.ancientObsidian] requires a [ItemType.stonePickaxe] or
+  ///   [ItemType.ironPickaxe].
+  bool canMineBlock(BlockType block) {
+    if (block == BlockType.ironOre) {
+      return equippedItem == ItemType.stonePickaxe ||
+          equippedItem == ItemType.ironPickaxe ||
+          equippedItem == ItemType.ironMachete;
+    }
+    if (block == BlockType.ancientObsidian) {
+      return equippedItem == ItemType.stonePickaxe ||
+          equippedItem == ItemType.ironPickaxe;
+    }
+    return block != BlockType.jungleShrine &&
+        block != BlockType.villageHutBlock &&
+        block != BlockType.air &&
+        block != BlockType.water;
+  }
+
+  /// Whether tile ([tx], [ty]) in the subterranean Pitch-Black Abyss
+  /// (`ty >= abyssDepthY`) is illuminated by a held or placed torch, campfire,
+  /// bioluminescent [ItemType.glowBulbSeeds] plant, or the Abyss Shrine blessing.
+  bool hasAbyssLightAt(int tx, int ty) {
+    if (abyssBlessingActive) return true;
+    if (equippedItem == ItemType.torchItem &&
+        (inventory[ItemType.torchItem] ?? 0) > 0) {
+      return true;
+    }
+    if (equippedItem == ItemType.glowFruit &&
+        (inventory[ItemType.glowFruit] ?? 0) > 0) {
+      return true;
+    }
+    for (int dy = -6; dy <= 6; dy++) {
+      for (int dx = -6; dx <= 6; dx++) {
+        final b = getBlock(tx + dx, ty + dy);
+        if (b == BlockType.torch || b == BlockType.campfire) {
+          return true;
+        }
+      }
+    }
+    for (final crop in crops.values) {
+      if (crop.seedType == ItemType.glowBulbSeeds &&
+          crop.growthProgress >= 0.30 &&
+          (crop.tileX - tx).abs() <= 6 &&
+          (crop.tileY - ty).abs() <= 6) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Whether tile ([tx], [ty]) lies inside the poisonous Toxic Viper Marsh
+  /// Miasma cloud surrounding a surface Venom Marsh Altar.
+  bool isInToxicMarshMiasma(int tx, int ty) {
+    if (ty < 14 || ty >= abyssDepthY) return false;
+    for (int dy = -3; dy <= 3; dy++) {
+      for (int dx = -5; dx <= 5; dx++) {
+        final checkY = ty + dy;
+        if (checkY >= 14 &&
+            checkY < abyssDepthY &&
+            getBlock(tx + dx, checkY) == BlockType.totemPedestal) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Whether the explorer at ([tx], [ty]) is protected from Toxic Viper Marsh
+  /// Miasma by nearby [ItemType.healingHerbSeeds] / [ItemType.pitcherPlantSeeds]
+  /// flora, carried [ItemType.healingHerb] poultices, or the Marsh Shrine blessing.
+  bool hasMarshMiasmaProtection(int tx, int ty) {
+    if (marshBlessingActive) return true;
+    if ((inventory[ItemType.healingHerb] ?? 0) > 0 ||
+        (inventory[ItemType.jungleNectar] ?? 0) > 0) {
+      return true;
+    }
+    for (final crop in crops.values) {
+      if ((crop.seedType == ItemType.healingHerbSeeds ||
+              crop.seedType == ItemType.pitcherPlantSeeds) &&
+          crop.growthProgress >= 0.30 &&
+          (crop.tileX - tx).abs() <= 6 &&
+          (crop.tileY - ty).abs() <= 5) {
+        return true;
+      }
+    }
+    return false;
   }
 
   bool _isWaterNearby(int tx, int ty) {
@@ -2358,6 +2664,18 @@ final class JungleWorld {
     }
 
     final block = getBlock(tx, ty);
+    if (block == BlockType.jungleShrine) {
+      socketShardsIntoShrine();
+      miningTarget = null;
+      miningProgress = 0.0;
+      return;
+    }
+    if (block == BlockType.totemPedestal) {
+      claimTotemPedestalAt(tx, ty);
+      miningTarget = null;
+      miningProgress = 0.0;
+      return;
+    }
     if (block == BlockType.air ||
         block == BlockType.water ||
         block == BlockType.villageHutBlock) {
@@ -2371,6 +2689,23 @@ final class JungleWorld {
       blocks[ty][tx] = BlockType.air;
       _fireBurnTicks.remove('$tx,$ty');
       setBanner('Beat out the flames!');
+      return;
+    }
+
+    // Enforce tool progression gates on Iron Ore and Ancient Obsidian vaults!
+    if (!canMineBlock(block)) {
+      miningTarget = null;
+      miningProgress = 0.0;
+      swingAnimationTimer = 0.18;
+      if (block == BlockType.ironOre) {
+        setBanner(
+          '⚒️ Crude Wood Pickaxe cannot mine Iron Ore! Craft a ⚒️ Stone Pickaxe (2 Wood + 3 Stone + 1 Vine) first.',
+        );
+      } else if (block == BlockType.ancientObsidian) {
+        setBanner(
+          '🔮 Ancient Obsidian is too hard! Craft a ⚒️ Stone Pickaxe or ⛏️ Iron Pickaxe to breach the vault!',
+        );
+      }
       return;
     }
 
@@ -2440,7 +2775,18 @@ final class JungleWorld {
           );
         }
       case BlockType.stone:
+      case BlockType.cloudStone:
         addItem(ItemType.stoneBlock, 1);
+      case BlockType.ancientObsidian:
+        addItem(ItemType.stoneBlock, 1);
+        addItem(ItemType.coalItem, 1);
+        setBanner('Breached 🔮 Ancient Obsidian Vault Wall!');
+      case BlockType.totemPedestal:
+        final shard = totemShardForPedestalAt(tx, ty);
+        addItem(shard, 1);
+        setBanner(
+          '🏆 Recovered ${shard.icon} ${shard.label}! Return to the 🗿 Ancient Jungle Shrine (X:31)!',
+        );
       case BlockType.coalOre:
         addItem(ItemType.coalItem, 1);
         addItem(ItemType.stoneBlock, 1);
@@ -2515,6 +2861,7 @@ final class JungleWorld {
       case BlockType.water:
       case BlockType.wildfire:
       case BlockType.villageHutBlock:
+      case BlockType.jungleShrine:
         break;
     }
   }
@@ -2797,6 +3144,29 @@ final class JungleWorld {
       playerHurtFlashTimer = 0.2;
       setBanner(
         '🔥 Burning in wildfire! Jump into water or pour a Water Bucket!',
+      );
+    }
+
+    // Progression Gate 1: Pitch-Black Abyss (y >= abyssDepthY) drains warmth &
+    // life unless illuminated by a Torch, Campfire, or bioluminescent Glow-Bulb!
+    if (playerTileY >= abyssDepthY &&
+        !hasAbyssLightAt(playerTileX, playerTileY)) {
+      warmth = (warmth - clampedDt * 5.0).clamp(0.0, 100.0);
+      health = (health - clampedDt * 3.8).clamp(0.0, 100.0);
+      playerHurtFlashTimer = 0.2;
+      setBanner(
+        '🌑 Pitch-Black Abyss! Hold/place a 🕯️ Torch or plant 💡 Glow-Bulbs to light the deep caverns!',
+      );
+    }
+
+    // Progression Gate 2: Toxic Viper Marsh Miasma drains life unless purified
+    // by nearby Medicinal Herbs / Pitcher Plants or carried Healing Poultices!
+    if (isInToxicMarshMiasma(playerTileX, playerTileY) &&
+        !hasMarshMiasmaProtection(playerTileX, playerTileY)) {
+      health = (health - clampedDt * 4.2).clamp(0.0, 100.0);
+      playerHurtFlashTimer = 0.2;
+      setBanner(
+        '☠️ Toxic Viper Marsh Miasma! Plant 🌿 Medicinal Herbs / 🌺 Pitcher Plants nearby or carry 🌿 Healing Poultices!',
       );
     }
 

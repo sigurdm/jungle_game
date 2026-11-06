@@ -249,6 +249,48 @@ enum BlockType {
     flammability: 0.0,
     primaryColor: Color(0xFF6D4C41),
     accentColor: Color(0xFFFFCC80),
+  ),
+
+  /// Dense ancient obsidian temple block in deep caverns; requires a
+  /// [ItemType.stonePickaxe] or [ItemType.ironPickaxe] to breach.
+  ancientObsidian(
+    label: 'Ancient Obsidian',
+    isSolid: true,
+    hardness: 2.2,
+    flammability: 0.0,
+    primaryColor: Color(0xFF1A1025),
+    accentColor: Color(0xFF7C4DFF),
+  ),
+
+  /// Ancient carved cloud-marble forming high-altitude sky islands above the canopy.
+  cloudStone(
+    label: 'Sky Temple Stone',
+    isSolid: true,
+    hardness: 1.5,
+    flammability: 0.0,
+    primaryColor: Color(0xFFCFD8DC),
+    accentColor: Color(0xFF00E5FF),
+  ),
+
+  /// Carved relic pedestal holding one of the three Ancient Totem Shards.
+  totemPedestal(
+    label: 'Ancient Totem Pedestal',
+    isSolid: false,
+    hardness: 1.0,
+    flammability: 0.0,
+    primaryColor: Color(0xFFFFD54F),
+    accentColor: Color(0xFF00E676),
+  ),
+
+  /// Ancient Jungle Shrine in the starter valley that awakens when all three
+  /// Ancient Totem Shards are socketed into its altar.
+  jungleShrine(
+    label: 'Ancient Jungle Shrine',
+    isSolid: false,
+    hardness: 99.0,
+    flammability: 0.0,
+    primaryColor: Color(0xFF37474F),
+    accentColor: Color(0xFFFFD700),
   );
 
   const BlockType({
@@ -283,7 +325,9 @@ enum BlockType {
       isSolid ||
       this == BlockType.woodPlank ||
       this == BlockType.thatchRoof ||
-      this == BlockType.villageHutBlock;
+      this == BlockType.villageHutBlock ||
+      this == BlockType.cloudStone ||
+      this == BlockType.ancientObsidian;
 
   /// Whether seeds and saplings can be sowed on this ground block.
   bool get isSowableSoil => soilType != null;
@@ -507,6 +551,15 @@ enum ItemType {
     category: ItemCategory.tool,
     miningSpeedMultiplier: 3.0,
     attackDamage: 14.0,
+  ),
+
+  /// Forged iron pickaxe capable of breaching deep [BlockType.ancientObsidian] vaults.
+  ironPickaxe(
+    label: 'Iron Pickaxe',
+    icon: '⛏️',
+    category: ItemCategory.tool,
+    miningSpeedMultiplier: 4.8,
+    attackDamage: 18.0,
   ),
 
   /// Crafted wooden spear with extended reach against jaguars and snakes.
@@ -862,6 +915,27 @@ enum ItemType {
     label: 'Warm Jungle Poncho',
     icon: '🧥',
     category: ItemCategory.material,
+  ),
+
+  /// Radiant sun-carved totem shard recovered from the Floating Sky Sanctuary.
+  skyTotemShard(
+    label: 'Sky Canopy Totem Shard',
+    icon: '☀️',
+    category: ItemCategory.material,
+  ),
+
+  /// Emerald serpent totem shard recovered from the Toxic Viper Marsh Altar.
+  marshTotemShard(
+    label: 'Venom Marsh Totem Shard',
+    icon: '🐍',
+    category: ItemCategory.material,
+  ),
+
+  /// Bioluminescent obsidian totem shard recovered from the Deep Abyss Vault.
+  abyssTotemShard(
+    label: 'Deep Abyss Totem Shard',
+    icon: '🔮',
+    category: ItemCategory.material,
   );
 
   const ItemType({
@@ -890,6 +964,14 @@ enum ItemType {
     ItemType.thornVineSeeds,
     ItemType.pitcherPlantSeeds,
     ItemType.mahoganySapling,
+  ];
+
+  /// Ordered list of the three Ancient Totem Shards required to awaken the
+  /// [BlockType.jungleShrine].
+  static const List<ItemType> allTotemShards = [
+    ItemType.skyTotemShard,
+    ItemType.marshTotemShard,
+    ItemType.abyssTotemShard,
   ];
 
   /// Display name of the item.
