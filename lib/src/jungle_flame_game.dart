@@ -1478,12 +1478,16 @@ final class JungleSurvivalGame extends FlameGame
         canvas.drawRect(
           rect,
           Paint()
-            ..shader =
-                Gradient.linear(Offset(left, top), Offset(left + s, top + s), [
-                  const Color(0xFF211333),
-                  const Color(0xFF12081F),
-                  const Color(0xFF311B92),
-                ]),
+            ..shader = Gradient.linear(
+              Offset(left, top),
+              Offset(left + s, top + s),
+              [
+                const Color(0xFF211333),
+                const Color(0xFF12081F),
+                const Color(0xFF311B92),
+              ],
+              const [0.0, 0.5, 1.0],
+            ),
         );
         final pulse = 0.55 + 0.45 * math.sin(_animTime * 3.2 + h * 0.4);
         final runePaint =

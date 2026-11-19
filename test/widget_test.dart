@@ -1,3 +1,6 @@
+import 'dart:ui' as ui;
+
+import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jungle_game/main.dart';
 
@@ -1156,6 +1159,165 @@ void main() {
       expect(find.textContaining('Warmth'), findsOneWidget);
       expect(find.textContaining('Seeds'), findsOneWidget);
       expect(find.text('JUMP'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'JungleSurvivalApp renders cleanly on tall desktop viewports showing the Abyss vault',
+    (tester) async {
+      tester.view.physicalSize = const ui.Size(1440, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(const JungleSurvivalApp());
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('Life'), findsOneWidget);
+    },
+  );
+
+  test(
+    'JungleSurvivalGame.render draws all block types, walls, crops, wildlife, and explorer without throwing',
+    () {
+      final world = JungleWorld.generate(seed: 164876);
+      final game = JungleSurvivalGame(worldState: world, onHudChanged: () {});
+      game.onGameResize(Vector2(1440, 1200));
+
+      void renderFrame() {
+        final recorder = ui.PictureRecorder();
+        final canvas = ui.Canvas(recorder);
+        final initialSaveCount = canvas.getSaveCount();
+        game.render(canvas);
+        expect(canvas.getSaveCount(), initialSaveCount);
+        recorder.endRecording().dispose();
+      }
+
+      // 1. Default spawn on a tall viewport where chunk-1 ancientObsidian (y=38) is visible.
+      renderFrame();
+
+      // 2. Exhaustive scene containing every WallType, BlockType, seed variety,
+      // AnimalType, fishing line, mining cracks, and explorer state.
+      final baseTx = world.playerTileX;
+      final baseTy = world.playerTileY;
+      for (int i = 0; i < WallType.values.length; i++) {
+        world.walls[baseTy - 2][baseTx - 4 + i] = WallType.values[i];
+      }
+      for (int i = 0; i < BlockType.values.length; i++) {
+        final tx = baseTx - 8 + (i % 16);
+        final ty = baseTy + 2 + (i ~/ 16);
+        world.blocks[ty][tx] = BlockType.values[i];
+      }
+      // Exercise totem pedestals across sky, marsh, and abyss elevations + awakened shrine
+      // outside the crop loop span (baseTx - 8 .. baseTx + 7).
+      world.blocks[8][baseTx] = BlockType.totemPedestal;
+      world.blocks[baseTy][baseTx + 9] = BlockType.totemPedestal;
+      world.blocks[JungleWorld.abyssDepthY + 2][baseTx] =
+          BlockType.totemPedestal;
+      world.socketedTotemShards.addAll([
+        ItemType.skyTotemShard,
+        ItemType.marshTotemShard,
+        ItemType.abyssTotemShard,
+      ]);
+      world.blocks[baseTy][baseTx + 10] = BlockType.jungleShrine;
+
+      // Exercise every seed variety at flowering and lush mature states.
+      world.crops.clear();
+      int cropOffset = -8;
+      for (final seed in ItemType.allSeedVarieties) {
+        for (final (progress, lush, attachDir) in const [
+          (0.75, 0.0, 0),
+          (1.0, 0.85, 1),
+        ]) {
+          final cx = baseTx + cropOffset++;
+          final cy = baseTy;
+          world.blocks[cy][cx] = BlockType.air;
+          world.blocks[cy + 1][cx] = BlockType.tilledSoil;
+          world.crops['$cx,$cy'] = CropPlot(
+            tileX: cx,
+            tileY: cy,
+            seedType: seed,
+            growthProgress: progress,
+            lushGrowth: lush,
+            isPollinated: true,
+            isFertilized: true,
+            vineSegments: 3,
+            climbedHeight: 4,
+            climbAttachDirection: attachDir,
+            spreadLeft: 2,
+            spreadRight: 2,
+          );
+        }
+      }
+
+      // Exercise every AnimalType in active states (facing both ways, damaged, badges).
+      world.animals.clear();
+      int animalIdx = 0;
+      for (final type in AnimalType.values) {
+        for (final facingRight in const [true, false]) {
+          final animal = JungleAnimal(
+            type: type,
+            x: world.playerX + (animalIdx - 5) * 28.0,
+            y: world.playerY,
+            facingRight: facingRight,
+            isAngry: type == AnimalType.beeSwarm,
+            isTamed: type == AnimalType.capuchinMonkey,
+            carriedSeed: type == AnimalType.toucan ? ItemType.berrySeeds : null,
+            activityBadge: switch (type) {
+              AnimalType.toucan => '🦜 SCREAM!',
+              AnimalType.jaguar => '🐆 ROAR!',
+              _ => '✨ Active',
+            },
+            badgeTimer: 1.5,
+          )..health = type.maxHealth * 0.5;
+          world.animals.add(animal);
+          animalIdx++;
+        }
+      }
+
+      world.activeFishing = FishingState(
+        bobberX: world.playerX + 64.0,
+        bobberY: world.playerY + 12.0,
+        hasBite: true,
+      );
+      world.miningTarget = (baseTx + 1, baseTy + 1);
+      world.miningProgress = 0.5;
+      world.playerHurtFlashTimer = 0.2;
+      world.playerVx = 80.0;
+      world.addItem(ItemType.warmPoncho, 1);
+
+      // Exercise every held item branch in _renderHeldEquipment + day/dusk/night/rain/abyss.
+      for (final item in const [
+        ItemType.woodPickaxe,
+        ItemType.stonePickaxe,
+        ItemType.ironPickaxe,
+        ItemType.woodSpear,
+        ItemType.ironMachete,
+        ItemType.torchItem,
+        ItemType.fishingRod,
+        ItemType.waterBucket,
+        ItemType.berrySeeds,
+      ]) {
+        world.hotbar[0] = item;
+        world.selectedHotbarIndex = 0;
+        world.playerFacingRight = !world.playerFacingRight;
+        world.swingAnimationTimer = 0.15;
+        renderFrame();
+      }
+
+      // Day + rain, dusk, night, and deep abyss lighting passes.
+      world.isRaining = true;
+      world.timeOfDay = 0.45;
+      renderFrame();
+
+      world.timeOfDay = 0.76;
+      renderFrame();
+
+      world.timeOfDay = 0.92;
+      renderFrame();
+
+      world.playerY = (JungleWorld.abyssDepthY + 3) * JungleWorld.tileSize;
+      renderFrame();
     },
   );
 }
