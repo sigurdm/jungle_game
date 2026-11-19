@@ -761,17 +761,17 @@ void main() {
     );
 
     test(
-      'sown plants grow across multiple squares, physically block movement when overgrown, and can be chopped down',
+      'sown plants grow across multiple squares without blocking the explorer, can optionally be chopped down, and briar thorns still block predators',
       () {
         final world = JungleWorld.generate(seed: 88);
         world.animals.clear();
         world.crops.clear();
 
-        // Prepare a flat 7-tile clearing around the explorer at y = 20 (ground at y = 21).
+        // Prepare a flat clearing around the explorer at y = 20 (ground at y = 21).
         final baseTx = 28;
         final groundY = 21;
         final cropY = groundY - 1;
-        for (int dx = -3; dx <= 5; dx++) {
+        for (int dx = -3; dx <= 8; dx++) {
           for (int y = 14; y <= cropY; y++) {
             world.blocks[y][baseTx + dx] = BlockType.air;
           }
@@ -786,13 +786,13 @@ void main() {
         world.addItem(ItemType.bananaSeeds, 2);
         expect(world.sowSeedAt(plantTx, cropY, ItemType.bananaSeeds), isTrue);
         final bananaCrop = world.crops['$plantTx,$cropY']!;
-        expect(bananaCrop.isBlockingPath, isFalse);
+        expect(bananaCrop.hasOvergrowth, isFalse);
 
         // Grow the Banana Palm to full maturity (1.0): it expands into a 3-tile
-        // tall × 3-tile wide multi-square structure of solid BlockType.overgrownStalk!
+        // tall × 3-tile wide multi-square structure of pass-through BlockType.overgrownStalk!
         bananaCrop.growthProgress = 1.0;
         world.update(0.05);
-        expect(bananaCrop.isBlockingPath, isTrue);
+        expect(bananaCrop.hasOvergrowth, isTrue);
         expect(bananaCrop.overgrownTiles.length, greaterThanOrEqualTo(5));
         expect(world.getBlock(plantTx, cropY), BlockType.overgrownStalk);
         expect(world.getBlock(plantTx, cropY - 1), BlockType.overgrownStalk);
@@ -806,22 +806,25 @@ void main() {
           BlockType.overgrownStalk,
         );
 
-        // Try walking right through the overgrown Banana Palm: the explorer is
-        // physically blocked from passing plantTx!
+        // Walk right through the overgrown Banana Palm: the explorer passes
+        // freely past plantTx without having to hack through it!
         for (int i = 0; i < 20; i++) {
           world.update(0.05, moveRight: true);
         }
-        expect(world.playerX, lessThan(plantTx * JungleWorld.tileSize + 4.0));
+        expect(
+          world.playerX,
+          greaterThan((plantTx + 1) * JungleWorld.tileSize),
+        );
 
-        // Harvesting the ripe bananas picks the fruit while leaving the
-        // overgrown stalks standing in the way.
+        // Move back next to the palm to harvest and test optional chopping.
+        world.playerX = (plantTx - 1) * JungleWorld.tileSize + 16.0;
         world.selectedHotbarIndex = 0; // Wood Pickaxe
         expect(world.interactOrPlaceAt(plantTx, cropY), isTrue);
-        expect(bananaCrop.isBlockingPath, isTrue);
+        expect(bananaCrop.hasOvergrowth, isTrue);
         expect(world.getBlock(plantTx, cropY), BlockType.overgrownStalk);
 
-        // Chop the overgrown plant down: all multi-tile overgrownStalk blocks
-        // clear to air and the explorer can walk freely through the cleared path!
+        // Optionally chop the overgrown plant down: all multi-tile blocks
+        // clear to air and drop fibers/thatch/seeds.
         final fibersBefore = world.inventory[ItemType.vineFiber] ?? 0;
         world.mineTileStep(plantTx, cropY, 0.5);
         expect(world.crops.containsKey('$plantTx,$cropY'), isFalse);
@@ -835,13 +838,43 @@ void main() {
           greaterThan(fibersBefore),
         );
 
-        for (int i = 0; i < 20; i++) {
+        // Briar Thorn-Vines grow multi-tile thornyBriar thickets that let the
+        // explorer walk right past while still blocking and pricking predators!
+        final briarTx = baseTx + 3;
+        world.playerX = (briarTx - 2) * JungleWorld.tileSize + 16.0;
+        world.addItem(ItemType.thornVineSeeds, 1);
+        expect(
+          world.sowSeedAt(briarTx, cropY, ItemType.thornVineSeeds),
+          isTrue,
+        );
+        final briarCrop = world.crops['$briarTx,$cropY']!;
+        briarCrop.growthProgress = 1.0;
+        world.update(0.05);
+        expect(world.getBlock(briarTx, cropY), BlockType.thornyBriar);
+        expect(world.getBlock(briarTx - 1, cropY), BlockType.thornyBriar);
+
+        for (int i = 0; i < 25; i++) {
           world.update(0.05, moveRight: true);
         }
         expect(
           world.playerX,
-          greaterThan((plantTx + 1) * JungleWorld.tileSize),
+          greaterThan((briarTx + 1) * JungleWorld.tileSize),
         );
+
+        // Spawn a Shadow Jaguar on the left side trying to pursue the explorer
+        // through the Briar Thicket: it gets blocked and pricked by the thorns.
+        final jaguar = JungleAnimal(
+          type: AnimalType.jaguar,
+          x: (briarTx - 2) * JungleWorld.tileSize + 16.0,
+          y: groundY * JungleWorld.tileSize,
+        );
+        final jaguarStartHp = jaguar.health;
+        world.animals.add(jaguar);
+        for (int i = 0; i < 16; i++) {
+          world.update(0.05);
+        }
+        expect(jaguar.x, lessThan(briarTx * JungleWorld.tileSize));
+        expect(jaguar.health, lessThan(jaguarStartHp));
       },
     );
   });

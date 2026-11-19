@@ -2242,12 +2242,8 @@ final class JungleWorld {
     if (crop.seedType.regrowsOnHarvest) {
       crop.growthProgress = 0.42;
       crop.isPollinated = false;
-      final chopHint =
-          crop.isBlockingPath
-              ? ' Overgrown stalks still block the path — chop with 🪓 Axe / 🗡️ Machete to clear!'
-              : '';
       setBanner(
-        'Harvested ${productCount}x ${product.icon} ${product.label}$bonusText! Perennial plant will regrow.$chopHint',
+        'Harvested ${productCount}x ${product.icon} ${product.label}$bonusText! Perennial plant will regrow.',
       );
     } else {
       _clearCropOvergrowthBlocks(crop);
@@ -2277,19 +2273,6 @@ final class JungleWorld {
       }
     }
     return null;
-  }
-
-  bool _doesPlayerOverlapTile(int tx, int ty) {
-    const halfW = 10.0;
-    const heightPx = 27.0;
-    final leftTile = pixelToTile(playerX - halfW);
-    final rightTile = pixelToTile(playerX + halfW);
-    final topTile = pixelToTile(playerY - heightPx);
-    final bottomTile = pixelToTile(playerY - 1.0);
-    return tx >= leftTile &&
-        tx <= rightTile &&
-        ty >= topTile &&
-        ty <= bottomTile;
   }
 
   void _syncCropOvergrowthBlocks(CropPlot crop) {
@@ -2338,7 +2321,6 @@ final class JungleWorld {
 
     for (final (gx, gy) in candidateTiles) {
       if (gy < 1 || gy >= height) continue;
-      if (_doesPlayerOverlapTile(gx, gy)) continue;
       final existing = getBlock(gx, gy);
       if (existing == BlockType.air) {
         blocks[gy][gx] = plantBlock;
@@ -2363,8 +2345,8 @@ final class JungleWorld {
 
   /// Chops down an overgrown multi-tile plant (or standalone
   /// [BlockType.overgrownStalk] / [BlockType.thornyBriar] block) at ([tx], [ty]),
-  /// clearing all of its obstructing tiles so the explorer can pass and
-  /// dropping plant fibers, thatch, logs, and seeds.
+  /// clearing all of its multi-tile foliage and dropping plant fibers, thatch,
+  /// logs, and seeds.
   bool chopOvergrownPlantAt(int tx, int ty) {
     final block = getBlock(tx, ty);
     final crop = findCropOccupyingTile(tx, ty);
@@ -2392,7 +2374,7 @@ final class JungleWorld {
         worldY: ty * tileSize + tileSize * 0.5,
       );
       setBanner(
-        '🪓 Chopped down overgrown ${crop.seedType.icon} ${crop.seedType.label} (+2 🪢 Vine Fiber, +1 🍃 Thatch & Seed)! Path cleared!',
+        '🪓 Chopped down overgrown ${crop.seedType.icon} ${crop.seedType.label} (+2 🪢 Vine Fiber, +1 🍃 Thatch & Seed)!',
       );
       return true;
     }
@@ -2400,9 +2382,7 @@ final class JungleWorld {
     blocks[ty][tx] = BlockType.air;
     addItem(ItemType.vineFiber, 2);
     addItem(ItemType.thatchBundle, 1);
-    setBanner(
-      '🪓 Chopped through ${block.label} (+2 🪢 Vine Fiber, +1 🍃 Thatch)!',
-    );
+    setBanner('🪓 Cleared ${block.label} (+2 🪢 Vine Fiber, +1 🍃 Thatch)!');
     return true;
   }
 
@@ -3500,8 +3480,8 @@ final class JungleWorld {
         }
       }
 
-      // Expand multi-tile physical stalks/thickets into the world grid as the
-      // plant grows large (>= 0.65), physically blocking movement until chopped!
+      // Expand multi-tile foliage stalks/thickets into the world grid as the
+      // plant grows large (>= 0.65) (walk-through for explorer; briars block predators).
       _syncCropOvergrowthBlocks(crop);
 
       if (crop.isMature && crop.seedType == ItemType.mahoganySapling) {
@@ -3716,24 +3696,6 @@ final class JungleWorld {
         playerY -= tileSize;
       } else {
         playerVx = 0.0;
-        final blockedTx = pixelToTile(
-          nextX + (playerFacingRight ? 10.0 : -10.0),
-        );
-        final blockedFootBlock = getBlock(blockedTx, (playerY - 6) ~/ tileSize);
-        final blockedTorsoBlock = getBlock(blockedTx, playerTileY);
-        if (blockedFootBlock.isOvergrownPlant ||
-            blockedTorsoBlock.isOvergrownPlant) {
-          if (statusBannerTimer <= 0) {
-            final isBriar =
-                blockedFootBlock == BlockType.thornyBriar ||
-                blockedTorsoBlock == BlockType.thornyBriar;
-            setBanner(
-              isBriar
-                  ? '🌵 Blocked by overgrown Thorny Briar! Hold/tap with 🪓 Axe or 🗡️ Machete to chop a path!'
-                  : '🌿 Overgrown plant stalks block the way! Hold/tap with 🪓 Axe or 🗡️ Machete to chop down!',
-            );
-          }
-        }
       }
     }
 
@@ -3936,13 +3898,15 @@ final class JungleWorld {
       }
 
       _moveLandOrAquaticAnimal(a, dt);
+      if (!animals.contains(a)) continue;
 
       if (!snakeOverride && distToPlayer < 24.0 && a.attackCooldown <= 0) {
         final midTx = pixelToTile((a.x + playerX) * 0.5);
         final midTy = pixelToTile(
           (a.y + playerY - 16.0) * 0.5,
         ).clamp(0, height - 1);
-        if (!getBlock(midTx, midTy).isSolid) {
+        final midBlock = getBlock(midTx, midTy);
+        if (!midBlock.isSolid && midBlock != BlockType.thornyBriar) {
           a.attackCooldown = 1.35;
           health = (health - a.type.contactDamage).clamp(0.0, 100.0);
           playerHurtFlashTimer = 0.35;
@@ -4582,23 +4546,34 @@ final class JungleWorld {
       final bodyTy = pixelToTile(a.y - 10).clamp(0, height - 1);
 
       final frontBlock = getBlock(frontTx, bodyTy);
-      if (!frontBlock.isSolid ||
-          (a.type == AnimalType.capuchinMonkey &&
-              frontBlock == BlockType.overgrownStalk)) {
+      final isPredator =
+          a.type == AnimalType.jaguar || a.type == AnimalType.snake;
+      final blockedByBriar = isPredator && frontBlock == BlockType.thornyBriar;
+      final aboveFrontBlock = getBlock(frontTx, bodyTy - 1);
+      final aboveBlocked =
+          aboveFrontBlock.isSolid ||
+          (isPredator && aboveFrontBlock == BlockType.thornyBriar);
+      if (!frontBlock.isSolid && !blockedByBriar) {
         a.x = nextX;
-      } else if (frontBlock != BlockType.doorClosed &&
+      } else if (!blockedByBriar &&
+          frontBlock != BlockType.doorClosed &&
           frontBlock != BlockType.woodPlank &&
           frontBlock != BlockType.villageHutBlock &&
-          !frontBlock.isOvergrownPlant &&
-          !getBlock(frontTx, bodyTy - 1).isSolid) {
+          !aboveBlocked) {
         a.x = nextX;
         a.y -= tileSize;
       } else {
-        if (frontBlock == BlockType.thornyBriar &&
-            (a.type == AnimalType.jaguar || a.type == AnimalType.snake)) {
+        if (blockedByBriar) {
           a.health -= 6.0 * dt;
           a.hurtFlashTimer = 0.2;
           a.showBadge('🌵 Pricked!');
+          if (a.health <= 0) {
+            animals.remove(a);
+            milestoneDefeatedPredator = true;
+            addItem(ItemType.vineFiber, 2);
+            setBanner('🌵 Briar Thorn-Vine defeated a ${a.type.label}!');
+            return;
+          }
         }
         a.facingRight = !a.facingRight;
       }

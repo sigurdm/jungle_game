@@ -293,22 +293,26 @@ enum BlockType {
     accentColor: Color(0xFFFFD700),
   ),
 
-  /// Thick, tangled woody stalks and branches grown by mature crops that
-  /// physically block movement until chopped down with an axe, machete, or pickaxe.
+  /// Thick, tangled woody stalks and broad foliage grown by mature crops.
+  ///
+  /// Pass-through for explorers and wildlife, and optionally choppable with a
+  /// machete, spear, or pickaxe for extra fibers, thatch, logs, and seeds.
   overgrownStalk(
     label: 'Overgrown Plant Stalk',
-    isSolid: true,
+    isSolid: false,
     hardness: 0.42,
     flammability: 0.68,
     primaryColor: Color(0xFF2E7D32),
     accentColor: Color(0xFF81C784),
   ),
 
-  /// Impassable thorny briar thicket grown by [ItemType.thornVineSeeds] that
-  /// physically blocks and pricks predators and explorers until chopped down.
+  /// Dense thorny briar thicket grown by [ItemType.thornVineSeeds].
+  ///
+  /// Pass-through for the explorer and friendly wildlife, while physically
+  /// blocking and pricking hostile predators until chopped down.
   thornyBriar(
     label: 'Thorny Briar Thicket',
-    isSolid: true,
+    isSolid: false,
     hardness: 0.55,
     flammability: 0.60,
     primaryColor: Color(0xFF33691E),
@@ -348,7 +352,7 @@ enum BlockType {
 
   /// Whether this block acts as an overhead roof for cold shelter calculation.
   bool get countsAsRoof =>
-      (isSolid && !isOvergrownPlant) ||
+      isSolid ||
       this == BlockType.woodPlank ||
       this == BlockType.thatchRoof ||
       this == BlockType.villageHutBlock ||
@@ -1280,14 +1284,13 @@ final class CropPlot {
   /// this plant as it matures.
   int vineSegments;
 
-  /// World tile coordinates `(tx, ty)` currently occupied by solid
-  /// [BlockType.overgrownStalk] or [BlockType.thornyBriar] blocks grown by this
-  /// plant as it expands beyond a single square.
+  /// World tile coordinates `(tx, ty)` currently occupied by pass-through
+  /// [BlockType.overgrownStalk] or [BlockType.thornyBriar] foliage grown by
+  /// this plant as it expands beyond a single square.
   final Set<(int, int)> overgrownTiles = {};
 
-  /// Whether this plant has grown solid multi-tile stalks/thickets that
-  /// physically block movement until chopped down.
-  bool get isBlockingPath => overgrownTiles.isNotEmpty;
+  /// Whether this plant has expanded into multi-tile overgrown foliage blocks.
+  bool get hasOvergrowth => overgrownTiles.isNotEmpty;
 
   /// Whether this plant species naturally extends climbing tendrils and
   /// creeping stolon vines as it grows.

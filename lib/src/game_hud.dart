@@ -911,7 +911,7 @@ final class _JungleSurvivalScreenState extends State<JungleSurvivalScreen> {
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
-                                      'Harvests: ${product.icon} ${product.label}  •  Size: ${seed.maxPlantWidthTiles}×${seed.maxPlantHeightTiles} tiles (blocks path when overgrown — chop with 🪓/🗡️)  •  ${seed.regrowsOnHarvest ? "♻️ Perennial" : "🌳 Grows Canopy Tree"}',
+                                      'Harvests: ${product.icon} ${product.label}  •  Size: ${seed.maxPlantWidthTiles}×${seed.maxPlantHeightTiles} tiles (${seed == ItemType.thornVineSeeds ? "blocks predators; walk-through for you" : "walk-through; chop with 🪓/🗡️ to clear"})  •  ${seed.regrowsOnHarvest ? "♻️ Perennial" : "🌳 Grows Canopy Tree"}',
                                       style: const TextStyle(
                                         color: Colors.amberAccent,
                                         fontSize: 11.5,

@@ -1658,8 +1658,8 @@ final class JungleSurvivalGame extends FlameGame
         }
 
       case BlockType.overgrownStalk:
-        // Dense intertwined woody jungle stalks and broad foliage physically
-        // blocking the tile until chopped down with an axe or machete.
+        // Dense intertwined woody jungle stalks and broad pass-through foliage
+        // that can optionally be chopped down with a machete or pickaxe.
         canvas.drawRRect(
           RRect.fromRectAndRadius(rect.deflate(2.0), const Radius.circular(6)),
           Paint()..color = const Color(0x661B5E20),
@@ -1699,7 +1699,7 @@ final class JungleSurvivalGame extends FlameGame
         }
 
       case BlockType.thornyBriar:
-        // Impassable thorny briar thicket with crossed woody canes and crimson rose thorns.
+        // Dense thorny briar thicket (pass-through for explorer, blocks predators) with crossed woody canes and crimson rose thorns.
         canvas.drawRRect(
           RRect.fromRectAndRadius(rect.deflate(1.5), const Radius.circular(6)),
           Paint()..color = const Color(0x88263218),
