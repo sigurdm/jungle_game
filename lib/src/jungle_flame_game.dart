@@ -364,12 +364,13 @@ final class JungleSurvivalGame extends FlameGame
       }
     }
 
-    // 3. Render growing crops on tilled/specialized soil (padded bounds for multi-tile plants).
+    // 3. Render growing crops on tilled/specialized soil (generous padded bounds
+    // for 5-tile-wide bushy spreaders and 6-tile-tall palms & climbers).
     for (final crop in worldState.crops.values) {
-      if (crop.tileX >= startTx - 3 &&
-          crop.tileX <= endTx + 3 &&
-          crop.tileY >= startTy - 4 &&
-          crop.tileY <= endTy + 4) {
+      if (crop.tileX >= startTx - 5 &&
+          crop.tileX <= endTx + 5 &&
+          crop.tileY >= startTy - 8 &&
+          crop.tileY <= endTy + 8) {
         _renderCrop(canvas, crop);
       }
     }
@@ -1658,81 +1659,78 @@ final class JungleSurvivalGame extends FlameGame
         }
 
       case BlockType.overgrownStalk:
-        // Dense intertwined woody jungle stalks and broad pass-through foliage
-        // that can optionally be chopped down with a machete or pickaxe.
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(rect.deflate(2.0), const Radius.circular(6)),
-          Paint()..color = const Color(0x661B5E20),
-        );
-        final stalkPaint =
-            Paint()
-              ..color = const Color(0xFF4E342E)
-              ..strokeWidth = 3.2
-              ..strokeCap = StrokeCap.round;
-        canvas.drawLine(
-          Offset(left + 7, top + s - 2),
-          Offset(left + s - 7, top + 2),
-          stalkPaint,
-        );
-        canvas.drawLine(
-          Offset(left + s - 7, top + s - 2),
-          Offset(left + 7, top + 2),
+        // Soft dappled organic canopy depth behind large multi-tile plants
+        // (no boxy square borders so tall palms, bushes & climbers shine cleanly).
+        canvas.drawCircle(
+          Offset(left + s * 0.5, top + s * 0.5),
+          13.5,
           Paint()
-            ..color = const Color(0xFF2E7D32)
-            ..strokeWidth = 3.0
-            ..strokeCap = StrokeCap.round,
+            ..shader = Gradient.radial(
+              Offset(left + s * 0.5, top + s * 0.5),
+              14.0,
+              [const Color(0x361B5E20), const Color(0x001B5E20)],
+            ),
         );
         for (final (lx, ly, ang) in const [
-          (9.0, 10.0, -0.7),
-          (23.0, 11.0, 0.7),
-          (10.0, 22.0, -0.9),
-          (22.0, 21.0, 0.9),
+          (10.0, 12.0, -0.75),
+          (22.0, 14.0, 0.75),
+          (15.0, 22.0, -0.35),
         ]) {
           _drawVeinedLeaf(
             canvas,
             Offset(left + lx, top + ly),
             angle: ang,
-            length: 8.5,
-            leafColor: const Color(0xFF388E3C),
-            veinColor: const Color(0xFFA5D6A7),
+            length: 7.2,
+            leafColor: const Color(0x88388E3C),
+            veinColor: const Color(0x88A5D6A7),
           );
         }
 
       case BlockType.thornyBriar:
-        // Dense thorny briar thicket (pass-through for explorer, blocks predators) with crossed woody canes and crimson rose thorns.
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(rect.deflate(1.5), const Radius.circular(6)),
-          Paint()..color = const Color(0x88263218),
+        // Organic interlacing thorny briar canes (pass-through for explorer,
+        // blocks predators) without boxy tile frames.
+        canvas.drawCircle(
+          Offset(left + s * 0.5, top + s * 0.5),
+          14.5,
+          Paint()
+            ..shader = Gradient.radial(
+              Offset(left + s * 0.5, top + s * 0.5),
+              15.0,
+              [const Color(0x55263218), const Color(0x00263218)],
+            ),
         );
         final canePaint =
             Paint()
-              ..color = const Color(0xFF33691E)
-              ..strokeWidth = 3.4
+              ..color = const Color(0xCC33691E)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.8
               ..strokeCap = StrokeCap.round;
-        canvas.drawLine(
-          Offset(left + 4, top + s - 3),
-          Offset(left + s - 4, top + 3),
-          canePaint,
-        );
-        canvas.drawLine(
-          Offset(left + s - 4, top + s - 3),
-          Offset(left + 4, top + 3),
-          canePaint,
-        );
-        canvas.drawLine(
-          Offset(left + 3, top + s * 0.5),
-          Offset(left + s - 3, top + s * 0.5),
-          Paint()
-            ..color = const Color(0xFF558B2F)
-            ..strokeWidth = 2.8
-            ..strokeCap = StrokeCap.round,
-        );
+        final cane1 =
+            Path()
+              ..moveTo(left + 3, top + s - 4)
+              ..quadraticBezierTo(
+                left + s * 0.5,
+                top + s * 0.35,
+                left + s - 3,
+                top + 4,
+              );
+        final cane2 =
+            Path()
+              ..moveTo(left + s - 3, top + s - 4)
+              ..quadraticBezierTo(
+                left + s * 0.5,
+                top + s * 0.65,
+                left + 3,
+                top + 4,
+              );
+        canvas.drawPath(cane1, canePaint);
+        canvas.drawPath(cane2, canePaint);
         for (final (txOff, tyOff, dir) in const [
-          (9.0, 9.0, -1.0),
-          (23.0, 9.0, 1.0),
-          (16.0, 16.0, 1.0),
-          (9.0, 23.0, -1.0),
-          (23.0, 23.0, 1.0),
+          (9.0, 10.0, -1.0),
+          (23.0, 10.0, 1.0),
+          (16.0, 17.0, 1.0),
+          (10.0, 24.0, -1.0),
+          (22.0, 23.0, 1.0),
         ]) {
           _drawCurvedRoseThorn(canvas, Offset(left + txOff, top + tyOff), dir);
         }
@@ -1783,15 +1781,72 @@ final class JungleSurvivalGame extends FlameGame
     const s = JungleWorld.tileSize;
     final cx = crop.tileX * s + s * 0.5;
     final bottomY = (crop.tileY + 1) * s;
-    final sway = math.sin(_animTime * 2.8 + crop.tileX) * 2.4;
-    final maxTilesH = crop.seedType.maxPlantHeightTiles.clamp(2, 4);
-    final maxPixelHeight = maxTilesH >= 3 ? 86.0 : 58.0;
+    final sway = math.sin(_animTime * 2.4 + crop.tileX * 0.85) * 2.6;
+
+    // Respect overhead ceilings and canopy obstacles so tall palms, trees,
+    // and climbers stay organically framed beneath caves, roofs, and leaves.
+    int openHeadroomTiles = crop.seedType.maxPlantHeightTiles;
+    for (int dy = 1; dy < openHeadroomTiles; dy++) {
+      final checkY = crop.tileY - dy;
+      if (checkY < 1) {
+        openHeadroomTiles = dy;
+        break;
+      }
+      final checkBlock = worldState.getBlock(crop.tileX, checkY);
+      final isOwnTile =
+          crop.overgrownTiles.contains((crop.tileX, checkY)) ||
+          crop.climbedVineTiles.contains((crop.tileX, checkY));
+      if (checkBlock != BlockType.air && !isOwnTile) {
+        openHeadroomTiles = dy;
+        break;
+      }
+    }
+    if (crop.seedType.plantGrowthHabit == PlantGrowthHabit.climber &&
+        crop.climbedHeight > 0 &&
+        crop.hasOvergrowth) {
+      openHeadroomTiles = math.min<int>(openHeadroomTiles, crop.climbedHeight);
+    }
+    final ceilingMaxPx = openHeadroomTiles * s - 4.0;
+    final effectiveScale = crop.effectiveGrowthScale; // 0.0..1.50
+    final normalizedScale = (effectiveScale / 1.50).clamp(0.0, 1.0);
+    final baseProgress = crop.establishedGrowthProgress;
+    final lush = crop.lushGrowth;
+
+    final targetMaxPx = switch (crop.seedType) {
+      ItemType.bananaSeeds => 148.0 + lush * 46.0, // ~4.6 to 6.1 tiles tall
+      ItemType.thornVineSeeds =>
+        crop.climbAttachDirection != 0 || crop.climbedHeight >= 4
+            ? 142.0 +
+                lush *
+                    50.0 // ~4.5 to 6.0 tiles climbing
+            : 108.0 + lush * 42.0,
+      ItemType.mangoSeeds => 126.0 + lush * 36.0, // ~4.0 to 5.1 tiles tall
+      ItemType.pitcherPlantSeeds =>
+        crop.climbAttachDirection != 0 || crop.climbedHeight >= 3
+            ? 122.0 +
+                lush *
+                    42.0 // ~3.8 to 5.1 tiles climbing
+            : 94.0 + lush * 34.0,
+      ItemType.glowBulbSeeds =>
+        crop.climbAttachDirection != 0 || crop.climbedHeight >= 3
+            ? 106.0 +
+                lush *
+                    32.0 // ~3.3 to 4.3 tiles climbing
+            : 84.0 + lush * 26.0,
+      ItemType.mahoganySapling => 112.0,
+      ItemType.berrySeeds => 68.0 + lush * 24.0, // ~2.1 to 2.9 tiles tall bushy
+      ItemType.healingHerbSeeds => 66.0 + lush * 26.0,
+      _ => 58.0,
+    };
+    final clampedMaxPx = math.min(targetMaxPx, ceilingMaxPx);
     final stemHeight =
-        9.0 + math.pow(crop.growthProgress, 1.12) * (maxPixelHeight - 9.0);
+        (9.0 + math.pow(baseProgress, 1.06) * (clampedMaxPx - 9.0))
+            .clamp(9.0, math.max(9.0, ceilingMaxPx))
+            .toDouble();
     final spreadScale =
         1.0 +
-        crop.growthProgress *
-            (crop.seedType.maxPlantWidthTiles >= 3 ? 1.45 : 0.85);
+        baseProgress * (crop.seedType.maxPlantWidthTiles >= 5 ? 1.85 : 1.15) +
+        lush * (crop.seedType.maxPlantWidthTiles >= 5 ? 0.95 : 0.45);
 
     // 1. Fertilized soil nutrient shimmer or habitat thriving/struggling aura at the base.
     if (crop.isFertilized) {
@@ -1826,10 +1881,10 @@ final class JungleSurvivalGame extends FlameGame
 
     // 2. Pollinated golden pollen sparkles floating around the multi-tile plant.
     if (crop.isPollinated) {
-      for (int i = 0; i < 5; i++) {
-        final angle = _animTime * 3.5 + i * 1.3;
-        final px = cx + math.cos(angle) * (12.0 * spreadScale);
-        final py = bottomY - stemHeight * 0.65 + math.sin(angle * 1.4) * 9.0;
+      for (int i = 0; i < 6; i++) {
+        final angle = _animTime * 3.5 + i * 1.05;
+        final px = cx + math.cos(angle) * (14.0 * spreadScale);
+        final py = bottomY - stemHeight * 0.65 + math.sin(angle * 1.4) * 12.0;
         canvas.drawCircle(
           Offset(px, py),
           2.1,
@@ -1846,37 +1901,123 @@ final class JungleSurvivalGame extends FlameGame
 
     switch (crop.seedType) {
       case ItemType.berrySeeds:
-        // Multi-tile sprawling bramble bush (2 tiles tall × 3 tiles wide) with
-        // central + lateral arching canes, blossoms, and clustered drupelet berries!
+        // Lush 5-tile-wide × 3-tile-tall sprawling bramble thicket with
+        // terrain-hugging runners, 5 arching canes, layered foliage billows,
+        // and abundant drupelet berry clusters!
+        final leftReachPx = (22.0 +
+                baseProgress * 28.0 +
+                crop.spreadLeft * 20.0 +
+                lush * 12.0)
+            .clamp(16.0, 82.0);
+        final rightReachPx = (22.0 +
+                baseProgress * 28.0 +
+                crop.spreadRight * 20.0 +
+                lush * 12.0)
+            .clamp(16.0, 82.0);
         _drawCreepingStolons(
           canvas,
           cx,
           bottomY,
-          crop.growthProgress,
+          effectiveScale,
           const Color(0xFF33691E),
+          leftReach: leftReachPx,
+          rightReach: rightReachPx,
         );
+
+        // Background shadow billows across the full bush width.
+        if (baseProgress >= 0.35) {
+          final bushMounds = <(double, double, double, double)>[
+            (
+              0.0,
+              stemHeight * 0.56,
+              36.0 + baseProgress * 28.0,
+              stemHeight * 0.66,
+            ),
+            if (baseProgress >= 0.55) ...[
+              (
+                -leftReachPx * 0.48,
+                stemHeight * 0.42,
+                34.0 + lush * 16.0,
+                stemHeight * 0.56,
+              ),
+              (
+                rightReachPx * 0.48,
+                stemHeight * 0.42,
+                34.0 + lush * 16.0,
+                stemHeight * 0.56,
+              ),
+            ],
+            if (crop.spreadLeft >= 2 || lush >= 0.30)
+              (
+                -leftReachPx * 0.84,
+                stemHeight * 0.28,
+                30.0 + lush * 14.0,
+                stemHeight * 0.42,
+              ),
+            if (crop.spreadRight >= 2 || lush >= 0.30)
+              (
+                rightReachPx * 0.84,
+                stemHeight * 0.28,
+                30.0 + lush * 14.0,
+                stemHeight * 0.42,
+              ),
+          ];
+          for (final (ox, oy, w, h) in bushMounds) {
+            final center = Offset(cx + ox + sway * 0.35, bottomY - oy);
+            canvas.drawOval(
+              Rect.fromCenter(center: center, width: w, height: h),
+              Paint()..color = const Color(0xFF1B5E20),
+            );
+            canvas.drawOval(
+              Rect.fromCenter(
+                center: center.translate(-2.0, -3.5),
+                width: w * 0.78,
+                height: h * 0.74,
+              ),
+              Paint()..color = const Color(0xFF2E7D32),
+            );
+            canvas.drawOval(
+              Rect.fromCenter(
+                center: center.translate(-4.0, -6.5),
+                width: w * 0.50,
+                height: h * 0.46,
+              ),
+              Paint()..color = const Color(0xFF43A047),
+            );
+          }
+        }
+
         final topPos = _drawArticulatedPlantStem(
           canvas,
           cx: cx,
           bottomY: bottomY,
           height: stemHeight,
           sway: sway,
-          progress: crop.growthProgress,
+          progress: baseProgress,
           nodeCount: crop.stemNodeCount,
           stemColor: const Color(0xFF388E3C),
           leafColor: const Color(0xFF2E7D32),
           veinColor: const Color(0xFFA5D6A7),
           drawTendrils: true,
         );
-        if (crop.growthProgress >= 0.55) {
-          for (final sideDir in const [-1.0, 1.0]) {
+        // Arching side canes fanning outward across the 5-tile bramble mound.
+        if (baseProgress >= 0.50) {
+          final caneSpecs = <(double, double, double)>[
+            (-leftReachPx * 0.46, stemHeight * 0.78, -5.0),
+            (rightReachPx * 0.46, stemHeight * 0.78, 5.0),
+            if (crop.spreadLeft >= 2 || lush >= 0.28)
+              (-leftReachPx * 0.82, stemHeight * 0.54, -8.0),
+            if (crop.spreadRight >= 2 || lush >= 0.28)
+              (rightReachPx * 0.82, stemHeight * 0.54, 8.0),
+          ];
+          for (final (offsetX, caneH, lean) in caneSpecs) {
             _drawArticulatedPlantStem(
               canvas,
-              cx: cx + sideDir * 18.0 * crop.growthProgress,
+              cx: cx + offsetX,
               bottomY: bottomY,
-              height: stemHeight * 0.72,
-              sway: sway + sideDir * 4.0,
-              progress: crop.growthProgress,
+              height: caneH,
+              sway: sway + lean,
+              progress: baseProgress,
               nodeCount: math.max(2, crop.stemNodeCount - 1),
               stemColor: const Color(0xFF2E7D32),
               leafColor: const Color(0xFF388E3C),
@@ -1885,86 +2026,135 @@ final class JungleSurvivalGame extends FlameGame
             );
           }
         }
-        if (crop.stage >= 1) {
-          final crownCenter = Offset(
-            cx + sway * 0.45,
-            bottomY - stemHeight * 0.68,
-          );
-          canvas.drawOval(
-            Rect.fromCenter(
-              center: crownCenter,
-              width: (18.0 + crop.growthProgress * 22.0) * spreadScale * 0.75,
-              height: 14.0 + crop.growthProgress * 14.0,
-            ),
-            Paint()..color = const Color(0xFF1B5E20),
-          );
-          canvas.drawOval(
-            Rect.fromCenter(
-              center: crownCenter.translate(-2.2, -2.5),
-              width: (13.0 + crop.growthProgress * 16.0) * spreadScale * 0.75,
-              height: 10.0 + crop.growthProgress * 9.5,
-            ),
-            Paint()..color = const Color(0xFF388E3C),
-          );
-        }
+
         if (crop.stage == 2) {
-          for (final (ox, oy) in const [
-            (-14.0, 0.52),
-            (-6.0, 0.78),
-            (6.0, 0.68),
-            (14.0, 0.50),
+          for (final (ox, oy) in [
+            (-leftReachPx * 0.72, 0.34),
+            (-leftReachPx * 0.38, 0.58),
+            (-8.0, 0.82),
+            (8.0, 0.76),
+            (rightReachPx * 0.38, 0.56),
+            (rightReachPx * 0.72, 0.34),
             (0.0, 0.44),
           ]) {
             _drawBotanicalBlossom(
               canvas,
-              Offset(
-                cx + ox * spreadScale * 0.75 + sway * 0.35,
-                bottomY - stemHeight * oy,
-              ),
+              Offset(cx + ox + sway * 0.35, bottomY - stemHeight * oy),
               petalColor: const Color(0xFFFFF9C4),
               centerColor: const Color(0xFFFFB300),
             );
           }
         } else if (crop.isMature) {
-          for (final (ox, oy) in const [
-            (-18.0, 0.48),
-            (-9.0, 0.74),
-            (9.0, 0.66),
-            (18.0, 0.46),
-            (-0.5, 0.46),
-            (4.5, 0.88),
-          ]) {
+          final berrySpots = <(double, double)>[
+            (-leftReachPx * 0.45, 0.48),
+            (-leftReachPx * 0.24, 0.72),
+            (0.0, 0.52),
+            (4.5, 0.86),
+            (rightReachPx * 0.26, 0.70),
+            (rightReachPx * 0.46, 0.46),
+            (-leftReachPx * 0.14, 0.30),
+            (rightReachPx * 0.16, 0.32),
+            if (crop.spreadLeft >= 2 || lush >= 0.28) ...[
+              (-leftReachPx * 0.78, 0.32),
+              (-leftReachPx * 0.66, 0.50),
+            ],
+            if (crop.spreadRight >= 2 || lush >= 0.28) ...[
+              (rightReachPx * 0.78, 0.32),
+              (rightReachPx * 0.66, 0.50),
+            ],
+          ];
+          for (final (ox, oy) in berrySpots) {
             _drawRealisticBerryCluster(
               canvas,
-              Offset(
-                topPos.dx + ox * spreadScale * 0.68 - sway * 0.2,
-                bottomY - stemHeight * oy,
-              ),
-              scale: 1.08,
+              Offset(topPos.dx + ox - sway * 0.2, bottomY - stemHeight * oy),
+              scale: 1.08 + lush * 0.14,
             );
           }
         }
 
       case ItemType.bananaSeeds:
-        // Giant 3-tile tall × 3-tile wide banana palm with thick ringed
-        // pseudo-stem, 6 broad arching tropical fronds, & hanging banana bunches!
-        final topX = cx + sway * 0.45;
+        // Towering 5-6 tile tall curved Banana Palm with ringed pseudo-stem,
+        // sweeping 5-tile-wide crown of 10 broad veined tropical fronds,
+        // hanging banana bunches, & sprouting daughter sucker shoot at base!
+        final leanDir = crop.tileX.isEven ? 1.0 : -1.0;
+        final trunkLean = leanDir * (6.0 + baseProgress * 12.0 + lush * 8.0);
+        final topX = cx + trunkLean + sway * 0.85;
         final topY = bottomY - stemHeight;
-        final baseHalfW = 3.8 + crop.growthProgress * 3.2;
-        final topHalfW = 2.0 + crop.growthProgress * 1.8;
+        final midCtrlX = cx + trunkLean * 0.28 + sway * 0.3;
+        final midCtrlY = bottomY - stemHeight * 0.48;
+        final baseHalfW = 4.2 + baseProgress * 3.8 + lush * 1.6;
+        final topHalfW = 2.2 + baseProgress * 1.8 + lush * 0.6;
+
+        // Basal daughter banana sucker shoot when established!
+        if (effectiveScale >= 0.88) {
+          final suckerDir = -leanDir;
+          final suckerH = stemHeight * (0.34 + lush * 0.08);
+          final suckerTop = Offset(
+            cx + suckerDir * (14.0 + lush * 6.0) + sway * 0.35,
+            bottomY - suckerH,
+          );
+          canvas.drawPath(
+            Path()
+              ..moveTo(cx + suckerDir * 3.0, bottomY)
+              ..quadraticBezierTo(
+                cx + suckerDir * 9.0,
+                bottomY - suckerH * 0.5,
+                suckerTop.dx,
+                suckerTop.dy,
+              ),
+            Paint()
+              ..color = const Color(0xFF558B2F)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 4.2
+              ..strokeCap = StrokeCap.round,
+          );
+          for (final (sDir, sLift, sLen) in [
+            (suckerDir, -7.0, 26.0 + lush * 8.0),
+            (suckerDir * 0.55, -14.0, 22.0 + lush * 6.0),
+            (-suckerDir * 0.65, -11.0, 18.0 + lush * 5.0),
+          ]) {
+            final sEnd = Offset(
+              suckerTop.dx + sDir * sLen,
+              suckerTop.dy - sLift * 0.35 + 5.0,
+            );
+            final sCtrl = Offset(
+              suckerTop.dx + sDir * sLen * 0.55,
+              suckerTop.dy + sLift,
+            );
+            final sBlade =
+                Path()
+                  ..moveTo(suckerTop.dx, suckerTop.dy + 1.0)
+                  ..quadraticBezierTo(
+                    sCtrl.dx,
+                    sCtrl.dy - 3.6,
+                    sEnd.dx,
+                    sEnd.dy,
+                  )
+                  ..quadraticBezierTo(
+                    sCtrl.dx,
+                    sCtrl.dy + 2.8,
+                    suckerTop.dx,
+                    suckerTop.dy + 3.5,
+                  )
+                  ..close();
+            canvas.drawPath(sBlade, Paint()..color = const Color(0xFF689F38));
+          }
+        }
+
+        // Curved tapered palm trunk with 3-stop bark shading.
         final trunkPath =
             Path()
               ..moveTo(cx - baseHalfW, bottomY)
               ..quadraticBezierTo(
-                cx - baseHalfW * 0.65,
-                bottomY - stemHeight * 0.5,
+                midCtrlX - baseHalfW * 0.68,
+                midCtrlY,
                 topX - topHalfW,
                 topY,
               )
               ..lineTo(topX + topHalfW, topY)
               ..quadraticBezierTo(
-                cx + baseHalfW * 0.65,
-                bottomY - stemHeight * 0.5,
+                midCtrlX + baseHalfW * 0.68,
+                midCtrlY,
                 cx + baseHalfW,
                 bottomY,
               )
@@ -1974,193 +2164,281 @@ final class JungleSurvivalGame extends FlameGame
           Paint()
             ..shader = Gradient.linear(
               Offset(cx - baseHalfW, bottomY),
-              Offset(cx + baseHalfW, bottomY),
+              Offset(cx + baseHalfW + trunkLean * 0.4, bottomY),
               [
                 const Color(0xFF33691E),
                 const Color(0xFF7CB342),
-                const Color(0xFF33691E),
+                const Color(0xFF5D4037),
               ],
-              [0.0, 0.45, 1.0],
+              [0.0, 0.42, 1.0],
             ),
         );
-        // Sheathing leaf-base rings along the tall pseudo-stem.
-        for (double ry = 6.0; ry < stemHeight - 3.0; ry += 7.0) {
-          final ringW =
-              baseHalfW - (baseHalfW - topHalfW) * (ry / stemHeight) * 0.85;
+
+        // Sheathing palm leaf-scar rings curving along the tall trunk.
+        final ringCount = (stemHeight / 7.5).floor();
+        for (int r = 1; r < ringCount; r++) {
+          final t = r / ringCount;
+          final omt = 1.0 - t;
+          final rx = omt * omt * cx + 2 * omt * t * midCtrlX + t * t * topX;
+          final ry =
+              omt * omt * bottomY + 2 * omt * t * midCtrlY + t * t * topY;
+          final ringW = baseHalfW + (topHalfW - baseHalfW) * t;
           canvas.drawLine(
-            Offset(cx - ringW + sway * (ry / stemHeight) * 0.3, bottomY - ry),
-            Offset(cx + ringW + sway * (ry / stemHeight) * 0.3, bottomY - ry),
+            Offset(rx - ringW * 0.92, ry),
+            Offset(rx + ringW * 0.92, ry),
             Paint()
-              ..color = const Color(0x882E4C14)
-              ..strokeWidth = 1.4,
+              ..color = const Color(0x992E4C14)
+              ..strokeWidth = 1.5,
           );
         }
-        if (crop.stage >= 1) {
-          for (final (dirFrond, lift, len) in const [
-            (-1.0, -10.0, 38.0),
-            (1.0, -10.0, 38.0),
-            (-0.78, -18.0, 30.0),
-            (0.78, -18.0, 30.0),
-            (-0.42, -22.0, 22.0),
-            (0.42, -22.0, 22.0),
+
+        // Broad sweeping palm frond crown (10 fronds spanning up to 5 tiles wide!).
+        if (baseProgress >= 0.30) {
+          final crownScale = 0.42 + baseProgress * 0.58 + lush * 0.34;
+          for (final (dirFrond, lift, len, droop, isDark) in const [
+            (-1.0, -6.0, 56.0, 18.0, true),
+            (1.0, -6.0, 56.0, 18.0, true),
+            (-0.92, -16.0, 52.0, 10.0, false),
+            (0.92, -16.0, 52.0, 10.0, false),
+            (-0.74, -24.0, 44.0, 2.0, true),
+            (0.74, -24.0, 44.0, 2.0, true),
+            (-0.48, -30.0, 34.0, -6.0, false),
+            (0.48, -30.0, 34.0, -6.0, false),
+            (-0.20, -34.0, 24.0, -14.0, false),
+            (0.20, -34.0, 24.0, -14.0, false),
           ]) {
-            final endX =
-                topX + dirFrond * len * (0.35 + crop.growthProgress * 0.65);
-            final endY = topY - lift * 0.45 + 6.0;
-            final ctrlX = topX + dirFrond * len * 0.55;
-            final ctrlY = topY + lift * (0.45 + crop.growthProgress * 0.55);
+            final scaledLen = len * crownScale;
+            final endX = topX + dirFrond * scaledLen;
+            final endY = topY + droop * crownScale;
+            final ctrlX = topX + dirFrond * scaledLen * 0.55;
+            final ctrlY = topY + lift * crownScale;
             final bladePath =
                 Path()
                   ..moveTo(topX, topY + 1.5)
-                  ..quadraticBezierTo(ctrlX, ctrlY - 4.8, endX, endY)
-                  ..quadraticBezierTo(ctrlX, ctrlY + 3.5, topX, topY + 4.5)
+                  ..quadraticBezierTo(ctrlX, ctrlY - 6.2, endX, endY)
+                  ..quadraticBezierTo(ctrlX, ctrlY + 4.8, topX, topY + 5.0)
                   ..close();
             canvas.drawPath(
               bladePath,
               Paint()
                 ..color =
-                    dirFrond.abs() > 0.8
-                        ? const Color(0xFF558B2F)
-                        : const Color(0xFF8BC34A),
+                    isDark ? const Color(0xFF558B2F) : const Color(0xFF8BC34A),
             );
             final midrib =
                 Path()
-                  ..moveTo(topX, topY + 2.5)
+                  ..moveTo(topX, topY + 2.8)
                   ..quadraticBezierTo(ctrlX, ctrlY - 0.6, endX, endY);
             canvas.drawPath(
               midrib,
               Paint()
                 ..color = const Color(0xFFDCEDC8)
                 ..style = PaintingStyle.stroke
-                ..strokeWidth = 1.4,
+                ..strokeWidth = 1.5,
             );
           }
         }
         if (crop.stage == 2) {
           canvas.drawOval(
             Rect.fromCenter(
-              center: Offset(topX + 6.0, topY + 9.0),
-              width: 6.0,
-              height: 9.5,
+              center: Offset(topX + 6.0, topY + 11.0),
+              width: 7.0,
+              height: 11.5,
             ),
             Paint()..color = const Color(0xFF880E4F),
           );
         } else if (crop.isMature) {
-          _drawRealisticBananaBunch(canvas, Offset(topX - 6.0, topY + 4.0));
-          _drawRealisticBananaBunch(canvas, Offset(topX + 7.5, topY + 7.0));
+          _drawRealisticBananaBunch(canvas, Offset(topX - 9.0, topY + 5.0));
+          _drawRealisticBananaBunch(canvas, Offset(topX + 9.0, topY + 7.5));
+          if (lush >= 0.25) {
+            _drawRealisticBananaBunch(canvas, Offset(topX - 1.0, topY + 14.0));
+          }
+          // Dangling crimson inflorescence bell below the banana hands.
+          canvas.drawLine(
+            Offset(topX + 1.0, topY + 15.0),
+            Offset(topX + 2.5, topY + 27.0),
+            Paint()
+              ..color = const Color(0xFF558B2F)
+              ..strokeWidth = 1.8,
+          );
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(topX + 2.5, topY + 30.0),
+              width: 6.2,
+              height: 9.8,
+            ),
+            Paint()..color = const Color(0xFF880E4F),
+          );
         }
 
       case ItemType.mangoSeeds:
-        // Towering 3-tile tall × 3-tile wide fruiting Mango Tree with thick
-        // gnarled trunk, spreading boughs, multi-tile crown, & hanging mangoes!
-        final topX = cx + sway * 0.35;
+        // Broad 5-tile-tall × 5-tile-wide fruiting Mango Orchard Tree with
+        // flared roots, gnarled trunk, 4 forked boughs, lush multi-lobed
+        // tropical canopy, & abundant golden-crimson mangoes!
+        final topX = cx + sway * 0.40;
         final topY = bottomY - stemHeight;
+        final boughScale = baseProgress + lush * 0.42;
+
+        // Flared buttress root base.
+        final rootPath =
+            Path()
+              ..moveTo(cx - 8.5 * boughScale, bottomY)
+              ..quadraticBezierTo(
+                cx - 3.5 * boughScale,
+                bottomY - 14.0,
+                cx - 3.2,
+                bottomY - stemHeight * 0.25,
+              )
+              ..lineTo(cx + 3.2, bottomY - stemHeight * 0.25)
+              ..quadraticBezierTo(
+                cx + 3.5 * boughScale,
+                bottomY - 14.0,
+                cx + 8.5 * boughScale,
+                bottomY,
+              )
+              ..close();
+        canvas.drawPath(rootPath, Paint()..color = const Color(0xFF4E342E));
+
         final trunkPaint =
             Paint()
               ..color = const Color(0xFF5D4037)
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 4.2 + crop.growthProgress * 3.8
+              ..strokeWidth = 5.0 + baseProgress * 4.5 + lush * 2.2
               ..strokeCap = StrokeCap.round;
         final trunkPath =
             Path()
               ..moveTo(cx, bottomY)
               ..quadraticBezierTo(
-                cx - 3.0,
-                bottomY - stemHeight * 0.5,
+                cx - 4.5,
+                bottomY - stemHeight * 0.48,
                 topX,
-                topY,
+                topY + 10.0,
               );
         canvas.drawPath(trunkPath, trunkPaint);
 
-        if (crop.stage >= 1) {
-          final boughReach = 28.0 * crop.growthProgress;
+        if (baseProgress >= 0.30) {
+          final wideBough = (30.0 + baseProgress * 22.0 + lush * 22.0).clamp(
+            18.0,
+            74.0,
+          );
           final branchPaint =
               Paint()
                 ..color = const Color(0xFF6D4C41)
-                ..strokeWidth = 3.2 + crop.growthProgress * 1.6
+                ..strokeWidth = 3.8 + baseProgress * 1.8 + lush * 1.0
                 ..strokeCap = StrokeCap.round;
+          // Lower sweeping boughs + upper forked crown limbs.
+          final forkY = topY + stemHeight * 0.30;
           canvas.drawLine(
-            Offset(topX, topY + 14.0),
-            Offset(topX - boughReach, topY + 2.0),
+            Offset(topX, forkY),
+            Offset(topX - wideBough, topY + 14.0),
             branchPaint,
           );
           canvas.drawLine(
-            Offset(topX, topY + 12.0),
-            Offset(topX + boughReach, topY + 1.0),
+            Offset(topX, forkY - 2.0),
+            Offset(topX + wideBough, topY + 12.0),
+            branchPaint,
+          );
+          canvas.drawLine(
+            Offset(topX, topY + 18.0),
+            Offset(topX - wideBough * 0.62, topY - 4.0),
+            branchPaint,
+          );
+          canvas.drawLine(
+            Offset(topX, topY + 18.0),
+            Offset(topX + wideBough * 0.62, topY - 4.0),
             branchPaint,
           );
 
-          final r = 10.0 + crop.growthProgress * 14.0;
-          canvas.drawCircle(
-            Offset(topX - boughReach * 0.72, topY + 3.0),
-            r * 0.82,
-            Paint()..color = const Color(0xFF1B5E20),
-          );
-          canvas.drawCircle(
-            Offset(topX + boughReach * 0.72, topY + 3.0),
-            r * 0.82,
-            Paint()..color = const Color(0xFF1B5E20),
-          );
-          canvas.drawCircle(
-            Offset(topX, topY - 4.0),
-            r * 0.96,
-            Paint()..color = const Color(0xFF2E7D32),
-          );
-          canvas.drawCircle(
-            Offset(topX - 4.0, topY - 7.0),
-            r * 0.65,
-            Paint()..color = const Color(0xFF43A047),
-          );
-        }
-        if (crop.stage == 2) {
-          for (final ox in const [-16.0, -7.0, 0.0, 7.0, 16.0]) {
-            _drawBotanicalBlossom(
-              canvas,
-              Offset(topX + ox * crop.growthProgress, topY - 2.0),
-              petalColor: const Color(0xFFFFF8E1),
-              centerColor: const Color(0xFFFF8F00),
+          // Multi-layered broad umbrella canopy spanning up to 5 tiles.
+          final r = 13.0 + baseProgress * 16.0 + lush * 8.0;
+          final canopyLobes = <(double, double, double, Color)>[
+            (-wideBough * 0.82, 12.0, r * 0.82, const Color(0xFF1B5E20)),
+            (wideBough * 0.82, 10.0, r * 0.82, const Color(0xFF1B5E20)),
+            (-wideBough * 0.42, -2.0, r * 0.94, const Color(0xFF2E7D32)),
+            (wideBough * 0.42, -2.0, r * 0.94, const Color(0xFF2E7D32)),
+            (0.0, -10.0, r * 1.05, const Color(0xFF2E7D32)),
+            (-wideBough * 0.25, -8.0, r * 0.68, const Color(0xFF43A047)),
+            (wideBough * 0.22, -12.0, r * 0.62, const Color(0xFF66BB6A)),
+          ];
+          for (final (ox, oy, rad, color) in canopyLobes) {
+            canvas.drawCircle(
+              Offset(topX + ox, topY + oy),
+              rad,
+              Paint()..color = color,
             );
           }
-        } else if (crop.isMature) {
-          for (final (ox, oy) in const [
-            (-18.0, 8.0),
-            (-7.5, 5.5),
-            (0.5, 2.5),
-            (8.5, 6.0),
-            (18.5, 8.5),
-          ]) {
-            _drawRealisticMango(canvas, Offset(topX + ox, topY + oy));
+
+          if (crop.stage == 2) {
+            for (final (ox, oy) in [
+              (-wideBough * 0.72, 12.0),
+              (-wideBough * 0.35, 0.0),
+              (0.0, -6.0),
+              (wideBough * 0.35, 0.0),
+              (wideBough * 0.72, 10.0),
+            ]) {
+              _drawBotanicalBlossom(
+                canvas,
+                Offset(topX + ox, topY + oy),
+                petalColor: const Color(0xFFFFF8E1),
+                centerColor: const Color(0xFFFF8F00),
+              );
+            }
+          } else if (crop.isMature) {
+            for (final (ox, oy) in [
+              (-wideBough * 0.78, 18.0),
+              (-wideBough * 0.45, 9.0),
+              (-12.0, 2.0),
+              (2.0, 5.0),
+              (15.0, -1.0),
+              (wideBough * 0.45, 8.0),
+              (wideBough * 0.78, 16.0),
+              if (lush >= 0.30) ...[
+                (-wideBough * 0.22, 16.0),
+                (wideBough * 0.24, 15.0),
+              ],
+            ]) {
+              _drawRealisticMango(canvas, Offset(topX + ox, topY + oy));
+            }
           }
         }
 
       case ItemType.healingHerbSeeds:
-        // Branching aromatic stems with opposite serrated leaves, midribs,
-        // pulsing emerald ward aura, & tiered floral spike whorls!
-        if (crop.stage >= 1) {
+        // Lush 5-tile-wide × 3-tile-tall billowing medicinal herb bush with
+        // 7 wide-fanned aromatic stems, broad emerald ward aura, & blossom whorls!
+        final auraRadius = 18.0 + baseProgress * 18.0 + lush * 14.0;
+        if (baseProgress >= 0.30) {
           canvas.drawCircle(
-            Offset(cx, bottomY - 11),
-            14.0 + math.sin(_animTime * 4.0) * 2.4,
+            Offset(cx, bottomY - stemHeight * 0.42),
+            auraRadius + math.sin(_animTime * 4.0) * 3.2,
             Paint()
-              ..shader = Gradient.radial(Offset(cx, bottomY - 11), 16.0, [
-                const Color(0x4800E676),
-                const Color(0x0000E676),
-              ]),
+              ..shader = Gradient.radial(
+                Offset(cx, bottomY - stemHeight * 0.42),
+                auraRadius + 4.0,
+                [const Color(0x5200E676), const Color(0x0000E676)],
+              ),
           );
         }
-        for (final (angle, lenScale) in const [
-          (-0.56, 0.78),
+        final herbStems = <(double, double)>[
+          (-0.52, 0.80),
           (0.0, 1.0),
-          (0.56, 0.78),
-        ]) {
+          (0.52, 0.80),
+          if (baseProgress >= 0.65) ...[(-0.92, 0.74), (0.92, 0.74)],
+          if (lush >= 0.28 ||
+              crop.spreadLeft >= 2 ||
+              crop.spreadRight >= 2) ...[
+            (-1.18, 0.66),
+            (1.18, 0.66),
+          ],
+        ];
+        for (final (angle, lenScale) in herbStems) {
           final branchH = stemHeight * lenScale;
-          final tipX = cx + math.sin(angle + sway * 0.05) * branchH * 0.72;
-          final tipY = bottomY - math.cos(angle) * branchH;
+          final tipX = cx + math.sin(angle + sway * 0.04) * branchH * 0.88;
+          final tipY = bottomY - math.cos(angle * 0.72) * branchH;
           final stemPath =
               Path()
                 ..moveTo(cx, bottomY)
                 ..quadraticBezierTo(
-                  (cx + tipX) * 0.5 - angle * 3.0,
-                  (bottomY + tipY) * 0.5,
+                  (cx + tipX) * 0.5 - angle * 4.5,
+                  (bottomY + tipY) * 0.5 + 3.0,
                   tipX,
                   tipY,
                 );
@@ -2169,19 +2447,19 @@ final class JungleSurvivalGame extends FlameGame
             Paint()
               ..color = const Color(0xFF00C853)
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 2.6
+              ..strokeWidth = 2.8 + lush * 0.8
               ..strokeCap = StrokeCap.round,
           );
-          // Opposite paired herb leaves along each stem.
-          if (crop.stage >= 1) {
-            for (final frac in const [0.42, 0.72]) {
+          if (baseProgress >= 0.30) {
+            for (final frac in const [0.32, 0.58, 0.82]) {
               final lx = cx + (tipX - cx) * frac;
               final ly = bottomY + (tipY - bottomY) * frac;
+              final leafLen = (7.0 + baseProgress * 4.5 + lush * 3.0);
               _drawVeinedLeaf(
                 canvas,
                 Offset(lx, ly),
                 angle: angle - 0.85,
-                length: 6.5 * crop.growthProgress,
+                length: leafLen,
                 leafColor: const Color(0xFF69F0AE),
                 veinColor: const Color(0xFFE0F2F1),
               );
@@ -2189,27 +2467,26 @@ final class JungleSurvivalGame extends FlameGame
                 canvas,
                 Offset(lx, ly),
                 angle: angle + 0.85,
-                length: 6.5 * crop.growthProgress,
+                length: leafLen,
                 leafColor: const Color(0xFF00E676),
                 veinColor: const Color(0xFFE0F2F1),
               );
             }
           }
           if (crop.isMature) {
-            // Tiered medicinal flower spike whorl at the apex of each stem.
-            for (int w = 0; w < 3; w++) {
-              final wy = tipY + w * 2.6;
+            for (int w = 0; w < 4; w++) {
+              final wy = tipY + w * 2.8;
               canvas.drawOval(
                 Rect.fromCenter(
                   center: Offset(tipX, wy),
-                  width: 6.5 - w,
-                  height: 3.2,
+                  width: 7.4 - w * 0.9,
+                  height: 3.4,
                 ),
                 Paint()..color = const Color(0xFFB9F6CA),
               );
               canvas.drawCircle(
                 Offset(tipX, wy),
-                1.3,
+                1.4,
                 Paint()..color = const Color(0xFFE1BEE7),
               );
             }
@@ -2217,39 +2494,75 @@ final class JungleSurvivalGame extends FlameGame
         }
 
       case ItemType.glowBulbSeeds:
-        // Winding bioluminescent lotus vine with curling tendrils, veined chalice
-        // sepals, and a ribbed translucent glowing lantern fruit!
+        // Climbing bioluminescent lantern liana (3.5-4.4 tiles tall!) that
+        // hugs cave walls, tree trunks, or canopies and hangs 4-5 glowing bulbs!
+        final attachShift = crop.climbAttachDirection * 9.0;
         _drawCreepingStolons(
           canvas,
           cx,
           bottomY,
-          crop.growthProgress,
+          effectiveScale,
           const Color(0xFF00796B),
         );
+        // Ambient bioluminescent cave aura when big/lush.
+        if (baseProgress >= 0.45) {
+          final haloR = 32.0 + baseProgress * 22.0 + lush * 24.0;
+          canvas.drawCircle(
+            Offset(cx + attachShift * 0.5, bottomY - stemHeight * 0.58),
+            haloR,
+            Paint()
+              ..shader = Gradient.radial(
+                Offset(cx + attachShift * 0.5, bottomY - stemHeight * 0.58),
+                haloR,
+                [const Color(0x3640C4FF), const Color(0x0040C4FF)],
+              ),
+          );
+        }
         final bulbCenter = _drawArticulatedPlantStem(
           canvas,
-          cx: cx,
+          cx: cx + attachShift * 0.45,
           bottomY: bottomY,
           height: stemHeight,
-          sway: sway,
-          progress: crop.growthProgress,
+          sway: sway * (crop.climbAttachDirection != 0 ? 0.35 : 1.0),
+          progress: baseProgress,
           nodeCount: crop.stemNodeCount,
           stemColor: const Color(0xFF00897B),
           leafColor: const Color(0xFF26A69A),
           veinColor: const Color(0xFF80CBC4),
           drawTendrils: true,
         );
-        if (crop.growthProgress >= 0.60) {
-          for (final side in const [-1.0, 1.0]) {
+        final outDir =
+            crop.climbAttachDirection != 0
+                ? -crop.climbAttachDirection.toDouble()
+                : 1.0;
+        if (baseProgress >= 0.55) {
+          final lanternNodes = <(double, double, double)>[
+            (outDir * (18.0 + lush * 10.0), 0.72, 0.58),
+            (-outDir * (15.0 + lush * 8.0), 0.50, 0.36),
+            if (effectiveScale >= 0.95)
+              (outDir * (22.0 + lush * 10.0), 0.38, 0.26),
+            if (lush >= 0.30) (-outDir * 18.0, 0.84, 0.72),
+          ];
+          for (final (ox, hFrac, anchorFrac) in lanternNodes) {
             final sideCenter = Offset(
-              cx + side * 16.0 * crop.growthProgress + sway * 0.5,
-              bottomY - stemHeight * 0.58,
+              cx + attachShift * 0.35 + ox + sway * 0.4,
+              bottomY - stemHeight * hFrac,
             );
-            canvas.drawLine(
-              Offset(cx, bottomY - stemHeight * 0.35),
-              sideCenter,
+            canvas.drawPath(
+              Path()
+                ..moveTo(
+                  cx + attachShift * 0.45,
+                  bottomY - stemHeight * anchorFrac,
+                )
+                ..quadraticBezierTo(
+                  (cx + sideCenter.dx) * 0.5,
+                  sideCenter.dy - 8.0,
+                  sideCenter.dx,
+                  sideCenter.dy,
+                ),
               Paint()
                 ..color = const Color(0xFF00897B)
+                ..style = PaintingStyle.stroke
                 ..strokeWidth = 2.4
                 ..strokeCap = StrokeCap.round,
             );
@@ -2259,29 +2572,53 @@ final class JungleSurvivalGame extends FlameGame
         _drawRealisticGlowFruit(canvas, bulbCenter, crop);
 
       case ItemType.thornVineSeeds:
-        // Towering 3-tile tall × 3-tile wide double-helix woody briar wall,
-        // lateral thorny arches, coiled tendrils, & crimson rosehips!
+        // Towering 5-6 tile climbing double-helix Briar Vine that wraps up
+        // adjacent walls & tree trunks while sprawling 5 tiles wide at the base!
+        final attachShift = crop.climbAttachDirection * 9.5;
+        final leftBriarPx = (24.0 +
+                baseProgress * 22.0 +
+                crop.spreadLeft * 20.0 +
+                lush * 10.0)
+            .clamp(18.0, 76.0);
+        final rightBriarPx = (24.0 +
+                baseProgress * 22.0 +
+                crop.spreadRight * 20.0 +
+                lush * 10.0)
+            .clamp(18.0, 76.0);
         _drawCreepingStolons(
           canvas,
           cx,
           bottomY,
-          crop.growthProgress,
+          effectiveScale,
           const Color(0xFF33691E),
+          leftReach: leftBriarPx,
+          rightReach: rightBriarPx,
         );
+
+        final climbSway = sway * (crop.climbAttachDirection != 0 ? 0.35 : 1.0);
+        final steps = (8 + (stemHeight / 18.0).floor()).clamp(8, 16);
         for (final strand in const [-1.0, 1.0]) {
           final vPath = Path()..moveTo(cx + strand * 6.5, bottomY);
-          const steps = 8;
           for (int i = 1; i <= steps; i++) {
             final frac = i / steps;
             final twist =
-                math.sin(frac * math.pi * 2.8 + (strand < 0 ? 0.0 : math.pi)) *
-                (7.5 * spreadScale * 0.65);
-            final vx = cx + twist + sway * frac;
+                math.sin(frac * math.pi * 4.2 + (strand < 0 ? 0.0 : math.pi)) *
+                (8.0 + normalizedScale * 4.5);
+            final vx = cx + attachShift * frac + twist + climbSway * frac;
             final vy = bottomY - stemHeight * frac;
             vPath.lineTo(vx, vy);
 
             final thornDir = twist >= 0 ? 1.0 : -1.0;
             _drawCurvedRoseThorn(canvas, Offset(vx, vy), thornDir);
+            if (crop.climbAttachDirection != 0 && i % 3 == 0) {
+              // Grasping tendrils latching straight onto the wall/tree trunk!
+              _drawSpiralTendril(
+                canvas,
+                Offset(vx, vy),
+                dir: crop.climbAttachDirection.toDouble(),
+                color: const Color(0xFF689F38),
+              );
+            }
           }
           canvas.drawPath(
             vPath,
@@ -2289,20 +2626,31 @@ final class JungleSurvivalGame extends FlameGame
               ..color =
                   strand < 0 ? const Color(0xFF33691E) : const Color(0xFF558B2F)
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 3.4
+              ..strokeWidth = 3.5 + lush * 0.8
               ..strokeCap = StrokeCap.round,
           );
         }
-        if (crop.growthProgress >= 0.60) {
-          for (final sideDir in const [-1.0, 1.0]) {
-            final sideX = cx + sideDir * 24.0 * crop.growthProgress;
-            final sideTopY = bottomY - stemHeight * 0.68;
+
+        // Wide double-tiered sweeping thorny arches across up to 5 tiles!
+        if (baseProgress >= 0.55) {
+          final arches = <(double, double, double)>[
+            (-leftBriarPx * 0.56, 0.42, 0.66),
+            (rightBriarPx * 0.56, 0.42, 0.66),
+            if (crop.spreadLeft >= 2 || lush >= 0.25)
+              (-leftBriarPx * 0.94, 0.26, 0.44),
+            if (crop.spreadRight >= 2 || lush >= 0.25)
+              (rightBriarPx * 0.94, 0.26, 0.44),
+          ];
+          for (final (targetDx, startFrac, peakFrac) in arches) {
+            final sideDir = targetDx < 0 ? -1.0 : 1.0;
+            final sideX = cx + targetDx;
+            final peakY = bottomY - stemHeight * peakFrac;
             final archPath =
                 Path()
-                  ..moveTo(cx, bottomY - stemHeight * 0.38)
+                  ..moveTo(cx, bottomY - stemHeight * startFrac)
                   ..quadraticBezierTo(
                     (cx + sideX) * 0.5,
-                    sideTopY - 8.0,
+                    peakY - 10.0,
                     sideX,
                     bottomY - 4.0,
                   );
@@ -2311,157 +2659,170 @@ final class JungleSurvivalGame extends FlameGame
               Paint()
                 ..color = const Color(0xFF33691E)
                 ..style = PaintingStyle.stroke
-                ..strokeWidth = 3.0
+                ..strokeWidth = 3.1
                 ..strokeCap = StrokeCap.round,
             );
             _drawCurvedRoseThorn(
               canvas,
-              Offset((cx + sideX) * 0.5, sideTopY),
+              Offset((cx + sideX) * 0.5, peakY - 2.0),
+              sideDir,
+            );
+            _drawCurvedRoseThorn(
+              canvas,
+              Offset(
+                cx + targetDx * 0.78,
+                bottomY - stemHeight * peakFrac * 0.45,
+              ),
               sideDir,
             );
           }
         }
-        if (crop.stage >= 1) {
-          _drawSpiralTendril(
-            canvas,
-            Offset(cx - 6.0 + sway * 0.6, bottomY - stemHeight * 0.72),
-            dir: -1.0,
-            color: const Color(0xFF689F38),
-          );
-          _drawSpiralTendril(
-            canvas,
-            Offset(cx + 6.0 + sway * 0.6, bottomY - stemHeight * 0.84),
-            dir: 1.0,
-            color: const Color(0xFF689F38),
-          );
-        }
         if (crop.isMature) {
-          for (final (ox, oy) in const [
-            (-16.0, 0.54),
-            (-5.5, 0.82),
-            (5.5, 0.82),
-            (16.0, 0.54),
+          for (final (ox, oy) in [
+            (-leftBriarPx * 0.42, 0.44),
+            (-7.5, 0.68),
+            (7.5, 0.82),
+            (rightBriarPx * 0.42, 0.44),
+            if (lush >= 0.25) ...[(-6.0, 0.94), (8.0, 0.56)],
           ]) {
-            final hx = cx + ox * crop.growthProgress + sway;
+            final hx = cx + attachShift * oy + ox + climbSway * oy;
             final hy = bottomY - stemHeight * oy;
             canvas.drawOval(
-              Rect.fromCenter(center: Offset(hx, hy), width: 5.5, height: 7.4),
+              Rect.fromCenter(center: Offset(hx, hy), width: 5.8, height: 7.8),
               Paint()..color = const Color(0xFFD50000),
             );
             canvas.drawCircle(
               Offset(hx - 0.9, hy - 1.4),
-              1.2,
+              1.3,
               Paint()..color = const Color(0xFFFF8A80),
             );
           }
         }
 
       case ItemType.pitcherPlantSeeds:
-        // Multi-tile Nepenthes liana with central + lateral hanging pitcher traps!
+        // Climbing Nepenthes Pitcher Vine (4-5 tiles tall!) wrapping upward
+        // along tree trunks, cliffs, or trellises with 5-6 hanging pitchers!
+        final attachShift = crop.climbAttachDirection * 9.0;
+        final outDir =
+            crop.climbAttachDirection != 0
+                ? -crop.climbAttachDirection.toDouble()
+                : 1.0;
         _drawCreepingStolons(
           canvas,
           cx,
           bottomY,
-          crop.growthProgress,
+          effectiveScale,
           const Color(0xFF2E7D32),
         );
         final topPos = _drawArticulatedPlantStem(
           canvas,
-          cx: cx,
+          cx: cx + attachShift * 0.45,
           bottomY: bottomY,
-          height: stemHeight * 0.85,
-          sway: sway,
-          progress: crop.growthProgress,
+          height: stemHeight,
+          sway: sway * (crop.climbAttachDirection != 0 ? 0.35 : 1.0),
+          progress: baseProgress,
           nodeCount: crop.stemNodeCount,
           stemColor: const Color(0xFF388E3C),
           leafColor: const Color(0xFF43A047),
           veinColor: const Color(0xFFC8E6C9),
           drawTendrils: true,
         );
-        if (crop.stage >= 1) {
-          _drawRealisticPitcher(
-            canvas,
-            Offset(topPos.dx + sway * 0.35, bottomY - stemHeight * 0.72),
-            crop,
-          );
-          if (crop.growthProgress >= 0.65) {
-            _drawRealisticPitcher(
-              canvas,
-              Offset(
-                cx - 15.0 * crop.growthProgress,
-                bottomY - stemHeight * 0.42,
-              ),
-              crop,
+        if (baseProgress >= 0.35) {
+          final pitcherSpecs = <(double, double)>[
+            (outDir * 10.0, 0.84),
+            if (baseProgress >= 0.60) ...[
+              (-outDir * (14.0 + lush * 6.0), 0.58),
+              (outDir * (19.0 + lush * 10.0), 0.48),
+            ],
+            if (effectiveScale >= 0.95) ...[
+              (outDir * (22.0 + lush * 10.0), 0.72),
+              (-outDir * 16.0, 0.32),
+            ],
+            if (lush >= 0.35) (outDir * 14.0, 0.94),
+          ];
+          for (final (ox, hFrac) in pitcherSpecs) {
+            final anchorX =
+                cx + attachShift * 0.45 + (topPos.dx - cx) * hFrac * 0.3;
+            final anchorY = bottomY - stemHeight * hFrac;
+            final pitcherPos = Offset(anchorX + ox, anchorY + 10.0);
+            canvas.drawPath(
+              Path()
+                ..moveTo(anchorX, anchorY - 2.0)
+                ..quadraticBezierTo(
+                  (anchorX + pitcherPos.dx) * 0.5,
+                  anchorY - 9.0,
+                  pitcherPos.dx,
+                  pitcherPos.dy - 6.0,
+                ),
+              Paint()
+                ..color = const Color(0xFF66BB6A)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.8
+                ..strokeCap = StrokeCap.round,
             );
-            _drawRealisticPitcher(
-              canvas,
-              Offset(
-                cx + 15.0 * crop.growthProgress,
-                bottomY - stemHeight * 0.48,
-              ),
-              crop,
-            );
+            _drawRealisticPitcher(canvas, pitcherPos, crop);
           }
         }
 
       case ItemType.mahoganySapling:
-        final topX = cx + sway * 0.3;
+        final topX = cx + sway * 0.35;
         final topY = bottomY - stemHeight;
-        // Flared buttress roots + shaded woody trunk + diverging branches.
+        final saplingW = 4.5 + baseProgress * 3.5;
         final saplingTrunk =
             Path()
-              ..moveTo(cx - 4.0, bottomY)
+              ..moveTo(cx - saplingW, bottomY)
               ..quadraticBezierTo(
-                cx - 1.8,
-                bottomY - stemHeight * 0.4,
-                topX - 1.5,
+                cx - saplingW * 0.42,
+                bottomY - stemHeight * 0.45,
+                topX - 2.2,
                 topY,
               )
-              ..lineTo(topX + 1.5, topY)
+              ..lineTo(topX + 2.2, topY)
               ..quadraticBezierTo(
-                cx + 1.8,
-                bottomY - stemHeight * 0.4,
-                cx + 4.0,
+                cx + saplingW * 0.42,
+                bottomY - stemHeight * 0.45,
+                cx + saplingW,
                 bottomY,
               )
               ..close();
         canvas.drawPath(saplingTrunk, Paint()..color = const Color(0xFF5D4037));
         if (crop.stage >= 1) {
+          final branchLen = 12.0 + baseProgress * 18.0;
+          final bPaint =
+              Paint()
+                ..color = const Color(0xFF4E342E)
+                ..strokeWidth = 3.0
+                ..strokeCap = StrokeCap.round;
           canvas.drawLine(
-            Offset(topX, topY + 6.0),
-            Offset(topX - 6.5 * crop.growthProgress, topY + 1.0),
-            Paint()
-              ..color = const Color(0xFF4E342E)
-              ..strokeWidth = 2.4
-              ..strokeCap = StrokeCap.round,
+            Offset(topX, topY + 12.0),
+            Offset(topX - branchLen, topY + 2.0),
+            bPaint,
           );
           canvas.drawLine(
-            Offset(topX, topY + 5.0),
-            Offset(topX + 6.5 * crop.growthProgress, topY + 0.5),
-            Paint()
-              ..color = const Color(0xFF4E342E)
-              ..strokeWidth = 2.4
-              ..strokeCap = StrokeCap.round,
+            Offset(topX, topY + 10.0),
+            Offset(topX + branchLen, topY + 1.0),
+            bPaint,
           );
         }
+        final crownR = 8.0 + baseProgress * 12.0;
         canvas.drawCircle(
-          Offset(topX - 4.0 * crop.growthProgress, topY + 1.5),
-          5.0 + crop.growthProgress * 4.5,
+          Offset(topX - 10.0 * baseProgress, topY + 3.0),
+          crownR * 0.85,
           Paint()..color = const Color(0xFF1B5E20),
         );
         canvas.drawCircle(
-          Offset(topX + 4.0 * crop.growthProgress, topY + 1.5),
-          5.0 + crop.growthProgress * 4.5,
+          Offset(topX + 10.0 * baseProgress, topY + 3.0),
+          crownR * 0.85,
           Paint()..color = const Color(0xFF2E7D32),
         );
         canvas.drawCircle(
-          Offset(topX, topY - 1.5),
-          6.0 + crop.growthProgress * 5.5,
+          Offset(topX, topY - 4.0),
+          crownR,
           Paint()..color = const Color(0xFF388E3C),
         );
         canvas.drawCircle(
-          Offset(topX - 1.8, topY - 3.0),
-          3.5 + crop.growthProgress * 3.5,
+          Offset(topX - 3.0, topY - 6.0),
+          crownR * 0.62,
           Paint()..color = const Color(0xFF66BB6A),
         );
 
@@ -2480,36 +2841,43 @@ final class JungleSurvivalGame extends FlameGame
     double cx,
     double bottomY,
     double progress,
-    Color vineColor,
-  ) {
+    Color vineColor, {
+    double? leftReach,
+    double? rightReach,
+  }) {
     if (progress < 0.25) return;
-    final reach = (progress - 0.20) * 18.0;
+    final defaultReach = (progress - 0.20) * 24.0;
     final stolonPaint =
         Paint()
           ..color = vineColor
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0
+          ..strokeWidth = 2.3
           ..strokeCap = StrokeCap.round;
-    for (final dir in const [-1.0, 1.0]) {
+    for (final (dir, reach) in [
+      (-1.0, leftReach ?? defaultReach),
+      (1.0, rightReach ?? defaultReach),
+    ]) {
       final path =
           Path()
-            ..moveTo(cx, bottomY - 1.0)
+            ..moveTo(cx, bottomY - 1.2)
             ..quadraticBezierTo(
-              cx + dir * reach * 0.5,
-              bottomY - 4.0,
+              cx + dir * reach * 0.48,
+              bottomY - 6.5,
               cx + dir * reach,
-              bottomY - 1.2,
+              bottomY - 1.4,
             );
       canvas.drawPath(path, stolonPaint);
       if (progress >= 0.55) {
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(cx + dir * reach * 0.65, bottomY - 3.6),
-            width: 5.0,
-            height: 2.8,
-          ),
-          Paint()..color = const Color(0xFF66BB6A),
-        );
+        for (final frac in const [0.42, 0.78]) {
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(cx + dir * reach * frac, bottomY - 4.2),
+              width: 6.0,
+              height: 3.2,
+            ),
+            Paint()..color = const Color(0xFF66BB6A),
+          );
+        }
       }
     }
   }

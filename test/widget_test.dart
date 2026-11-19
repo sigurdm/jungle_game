@@ -877,6 +877,272 @@ void main() {
         expect(jaguar.health, lessThan(jaguarStartHp));
       },
     );
+
+    test(
+      'tall banana palms reach 6 tiles with 5-tile crowns and broad mango trees grow 5x5 canopies',
+      () {
+        final world = JungleWorld.generate(seed: 99);
+        world.animals.clear();
+        world.crops.clear();
+
+        const groundY = 21;
+        const cropY = groundY - 1;
+        for (int tx = 16; tx <= 40; tx++) {
+          for (int y = 8; y <= cropY; y++) {
+            world.blocks[y][tx] = BlockType.air;
+          }
+          world.blocks[groundY][tx] = BlockType.grass;
+        }
+
+        // Tall Banana Palm (6 tiles tall × 5-tile wide crown).
+        const palmTx = 20;
+        world.addItem(ItemType.bananaSeeds, 2);
+        expect(world.sowSeedAt(palmTx, cropY, ItemType.bananaSeeds), isTrue);
+        final palm = world.crops['$palmTx,$cropY']!;
+        palm.growthProgress = 1.0;
+        palm.lushGrowth = 0.80;
+        world.update(0.05);
+
+        expect(world.getBlock(palmTx, cropY - 4), BlockType.overgrownStalk);
+        expect(world.getBlock(palmTx, cropY - 5), BlockType.overgrownStalk);
+        expect(world.getBlock(palmTx - 2, cropY - 4), BlockType.overgrownStalk);
+        expect(world.getBlock(palmTx + 2, cropY - 4), BlockType.overgrownStalk);
+        expect(world.findCropOccupyingTile(palmTx, cropY - 5), same(palm));
+
+        // Harvesting a mature perennial palm resets growthProgress to 0.42 but
+        // preserves hasMatured, established stature (>= 0.82), and tall crown.
+        world.playerX = (palmTx - 1) * JungleWorld.tileSize + 16.0;
+        world.playerY = groundY * JungleWorld.tileSize;
+        expect(world.interactOrPlaceAt(palmTx, cropY), isTrue);
+        expect(palm.hasMatured, isTrue);
+        expect(palm.growthProgress, closeTo(0.42, 0.01));
+        expect(palm.establishedGrowthProgress, closeTo(0.82, 0.01));
+        expect(palm.effectiveGrowthScale, greaterThanOrEqualTo(0.82));
+        world.update(0.05);
+        expect(world.getBlock(palmTx, cropY - 4), BlockType.overgrownStalk);
+
+        // Broad Mango Orchard Tree (5×5 multi-tier canopy boughs).
+        const mangoTx = 30;
+        world.addItem(ItemType.mangoSeeds, 2);
+        expect(world.sowSeedAt(mangoTx, cropY, ItemType.mangoSeeds), isTrue);
+        final mango = world.crops['$mangoTx,$cropY']!;
+        mango.growthProgress = 1.0;
+        mango.lushGrowth = 0.80;
+        world.update(0.05);
+
+        expect(world.getBlock(mangoTx, cropY - 4), BlockType.overgrownStalk);
+        expect(
+          world.getBlock(mangoTx - 2, cropY - 2),
+          BlockType.overgrownStalk,
+        );
+        expect(
+          world.getBlock(mangoTx + 2, cropY - 3),
+          BlockType.overgrownStalk,
+        );
+        expect(
+          world.getBlock(mangoTx - 1, cropY - 4),
+          BlockType.overgrownStalk,
+        );
+        expect(
+          world.getBlock(mangoTx + 1, cropY - 4),
+          BlockType.overgrownStalk,
+        );
+        expect(
+          world.findCropOccupyingTile(mangoTx + 2, cropY - 3),
+          same(mango),
+        );
+      },
+    );
+
+    test(
+      'bushy berry brambles and medicinal herbs spread 5 tiles wide along terrain steps',
+      () {
+        final world = JungleWorld.generate(seed: 101);
+        world.animals.clear();
+        world.crops.clear();
+
+        const groundY = 21;
+        const cropY = groundY - 1;
+        for (int tx = 16; tx <= 42; tx++) {
+          for (int y = 12; y <= cropY; y++) {
+            world.blocks[y][tx] = BlockType.air;
+          }
+          world.blocks[groundY][tx] = BlockType.grass;
+        }
+
+        // Bushy Sprawling Berry Bramble grows gradually (does not jump to side
+        // spreading at growthProgress 0.65) and hugs a 1-tile step once lush.
+        const bushTx = 22;
+        world.blocks[cropY][bushTx + 2] = BlockType.grass;
+        world.addItem(ItemType.berrySeeds, 2);
+        expect(world.sowSeedAt(bushTx, cropY, ItemType.berrySeeds), isTrue);
+        final bush = world.crops['$bushTx,$cropY']!;
+        bush.growthProgress = 0.66;
+        world.update(0.05);
+        expect(bush.hasMatured, isFalse);
+        expect(bush.spreadLeft, 0);
+        expect(bush.spreadRight, 0);
+
+        bush.growthProgress = 1.0;
+        bush.lushGrowth = 0.65;
+        world.update(0.05);
+
+        expect(bush.hasMatured, isTrue);
+        expect(bush.spreadLeft, 2);
+        expect(bush.spreadRight, 2);
+        expect(world.getBlock(bushTx - 2, cropY), BlockType.overgrownStalk);
+        expect(world.getBlock(bushTx + 1, cropY), BlockType.overgrownStalk);
+        expect(world.getBlock(bushTx + 2, cropY - 1), BlockType.overgrownStalk);
+        expect(world.getBlock(bushTx, cropY - 2), BlockType.overgrownStalk);
+
+        // Lush Medicinal Herb Bush spreading 5 tiles wide across flat soil.
+        const herbTx = 34;
+        world.addItem(ItemType.healingHerbSeeds, 2);
+        expect(
+          world.sowSeedAt(herbTx, cropY, ItemType.healingHerbSeeds),
+          isTrue,
+        );
+        final herb = world.crops['$herbTx,$cropY']!;
+        herb.growthProgress = 1.0;
+        herb.lushGrowth = 0.75;
+        world.update(0.05);
+
+        expect(herb.spreadLeft, 2);
+        expect(herb.spreadRight, 2);
+        expect(world.getBlock(herbTx - 2, cropY), BlockType.overgrownStalk);
+        expect(world.getBlock(herbTx + 2, cropY), BlockType.overgrownStalk);
+        expect(world.getBlock(herbTx, cropY - 2), BlockType.overgrownStalk);
+      },
+    );
+
+    test(
+      'climbers scale adjacent trunks and cliffs without adopting or deleting pre-existing natural vines',
+      () {
+        final world = JungleWorld.generate(seed: 103);
+        world.animals.clear();
+        world.crops.clear();
+
+        const groundY = 21;
+        const cropY = groundY - 1;
+        for (int tx = 16; tx <= 52; tx++) {
+          for (int y = 8; y <= cropY; y++) {
+            world.blocks[y][tx] = BlockType.air;
+          }
+          world.blocks[groundY][tx] = BlockType.grass;
+        }
+
+        // 1. Pitcher Plant beside a 5-tile Mahogany trunk sprouts climbable vines.
+        const climberTx = 22;
+        for (int dy = 0; dy < 5; dy++) {
+          world.blocks[cropY - dy][climberTx + 1] = BlockType.woodLog;
+        }
+        world.addItem(ItemType.pitcherPlantSeeds, 2);
+        expect(
+          world.sowSeedAt(climberTx, cropY, ItemType.pitcherPlantSeeds),
+          isTrue,
+        );
+        final pitcher = world.crops['$climberTx,$cropY']!;
+        pitcher.growthProgress = 1.0;
+        pitcher.lushGrowth = 0.70;
+        world.update(0.05);
+
+        expect(pitcher.climbAttachDirection, 1);
+        expect(pitcher.climbedHeight, 5);
+        for (int dy = 1; dy <= 4; dy++) {
+          expect(world.getBlock(climberTx, cropY - dy), BlockType.vine);
+          expect(
+            world.findCropOccupyingTile(climberTx, cropY - dy),
+            same(pitcher),
+          );
+        }
+
+        // Climbed Pitcher Plant snaps at an angry bee flying near its upper
+        // climbed vine tile (cropY - 3), well outside the root tile's 26px box!
+        final angryBee = JungleAnimal(
+          type: AnimalType.beeSwarm,
+          x: climberTx * JungleWorld.tileSize + 16.0,
+          y: (cropY - 2) * JungleWorld.tileSize,
+          isAngry: true,
+        );
+        final beeStartHp = angryBee.health;
+        world.animals.add(angryBee);
+        world.update(0.05);
+        expect(angryBee.health, lessThan(beeStartHp));
+        world.animals.clear();
+
+        // Chopping the climber clears its root foliage and the vines it sprouted.
+        expect(world.chopOvergrownPlantAt(climberTx, cropY), isTrue);
+        for (int dy = 0; dy <= 4; dy++) {
+          expect(world.getBlock(climberTx, cropY - dy), BlockType.air);
+        }
+
+        // 2. Sowing a climber beneath a pre-existing natural world vine does NOT
+        // claim or delete that natural vine when the climber is chopped down.
+        const naturalVineTx = 30;
+        world.blocks[cropY - 3][naturalVineTx] = BlockType.leaves;
+        world.blocks[cropY - 2][naturalVineTx] = BlockType.vine;
+        world.addItem(ItemType.pitcherPlantSeeds, 2);
+        expect(
+          world.sowSeedAt(naturalVineTx, cropY, ItemType.pitcherPlantSeeds),
+          isTrue,
+        );
+        final underVine = world.crops['$naturalVineTx,$cropY']!;
+        underVine.growthProgress = 1.0;
+        underVine.lushGrowth = 0.70;
+        world.update(0.05);
+
+        // It sprouted its own vine at cropY - 1, but must NOT own cropY - 2.
+        expect(world.getBlock(naturalVineTx, cropY - 1), BlockType.vine);
+        expect(
+          underVine.climbedVineTiles.contains((naturalVineTx, cropY - 2)),
+          isFalse,
+        );
+        expect(world.chopOvergrownPlantAt(naturalVineTx, cropY), isTrue);
+        expect(world.getBlock(naturalVineTx, cropY - 1), BlockType.air);
+        expect(world.getBlock(naturalVineTx, cropY - 2), BlockType.vine);
+
+        // 3. Briar Thorn-Vine beside a 6-tile stone cliff climbs 6 tiles high
+        // AND spreads 2 tiles wide on the open side.
+        const briarTx = 42;
+        for (int dy = 0; dy < 6; dy++) {
+          world.blocks[cropY - dy][briarTx + 1] = BlockType.stone;
+        }
+        world.addItem(ItemType.thornVineSeeds, 2);
+        expect(
+          world.sowSeedAt(briarTx, cropY, ItemType.thornVineSeeds),
+          isTrue,
+        );
+        final briar = world.crops['$briarTx,$cropY']!;
+        briar.growthProgress = 1.0;
+        briar.lushGrowth = 0.75;
+        world.update(0.05);
+
+        expect(briar.climbAttachDirection, 1);
+        expect(briar.climbedHeight, 6);
+        expect(briar.spreadLeft, 2);
+        expect(world.getBlock(briarTx, cropY - 5), BlockType.thornyBriar);
+        expect(world.getBlock(briarTx - 2, cropY), BlockType.thornyBriar);
+
+        // 4. Briar Thorn-Vine planted directly beneath a leaf canopy climbs
+        // with BlockType.thornyBriar (never turns into a climbable BlockType.vine).
+        const canopyBriarTx = 48;
+        world.blocks[cropY - 3][canopyBriarTx] = BlockType.leaves;
+        world.addItem(ItemType.thornVineSeeds, 2);
+        expect(
+          world.sowSeedAt(canopyBriarTx, cropY, ItemType.thornVineSeeds),
+          isTrue,
+        );
+        final canopyBriar = world.crops['$canopyBriarTx,$cropY']!;
+        canopyBriar.growthProgress = 0.65;
+        world.update(0.05);
+        expect(world.getBlock(canopyBriarTx, cropY - 1), BlockType.thornyBriar);
+        expect(canopyBriar.climbedHeight, greaterThanOrEqualTo(2));
+        canopyBriar.growthProgress = 1.0;
+        world.update(0.05);
+        expect(world.getBlock(canopyBriarTx, cropY - 2), BlockType.thornyBriar);
+        expect(canopyBriar.climbedHeight, 3);
+      },
+    );
   });
 
   testWidgets(

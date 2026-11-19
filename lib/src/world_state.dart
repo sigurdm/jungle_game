@@ -2200,6 +2200,7 @@ final class JungleWorld {
     final product = crop.harvestedFruit;
     final pollinationBonus = crop.isPollinated ? 1 : 0;
     final thrivingBonus = crop.lastHabitatMultiplier >= 1.35 ? 1 : 0;
+    final lushBonus = crop.lushGrowth >= 0.50 ? 1 : 0;
     final strugglingPenalty = crop.lastHabitatMultiplier <= 0.70 ? -1 : 0;
     final productCount = math.max(
       1,
@@ -2207,6 +2208,7 @@ final class JungleWorld {
           _rng.nextInt(2) +
           pollinationBonus +
           thrivingBonus +
+          lushBonus +
           strugglingPenalty,
     );
     final seedCount = math.max(
@@ -2240,6 +2242,7 @@ final class JungleWorld {
     }
 
     if (crop.seedType.regrowsOnHarvest) {
+      crop.hasMatured = true;
       crop.growthProgress = 0.42;
       crop.isPollinated = false;
       setBanner(
@@ -2255,29 +2258,145 @@ final class JungleWorld {
     return true;
   }
 
-  /// Returns the [CropPlot] whose root tile or multi-tile overgrown stalks
-  /// occupy ([tx], [ty]), or `null` if none.
+  /// Returns the [CropPlot] whose root tile, multi-tile overgrown foliage, or
+  /// climbed vine ladder occupies ([tx], [ty]), or `null` if none.
   CropPlot? findCropOccupyingTile(int tx, int ty) {
-    for (final cy in [ty, ty - 1, ty + 1, ty + 2]) {
+    for (int cy = ty - 1; cy <= ty + 6; cy++) {
       if (crops['$tx,$cy'] case final crop?) {
         if (cy == ty ||
             crop.overgrownTiles.contains((tx, ty)) ||
+            crop.climbedVineTiles.contains((tx, ty)) ||
             (cy == ty + 1 && crop.growthProgress >= 0.45)) {
           return crop;
         }
       }
     }
     for (final crop in crops.values) {
-      if (crop.overgrownTiles.contains((tx, ty))) {
+      if (crop.overgrownTiles.contains((tx, ty)) ||
+          crop.climbedVineTiles.contains((tx, ty))) {
         return crop;
       }
     }
     return null;
   }
 
+  bool _isClimbSupportBlock(BlockType block) =>
+      block.isSolid || block == BlockType.woodLog || block == BlockType.leaves;
+
+  bool _isOverheadTrellisBlock(BlockType block) =>
+      block == BlockType.leaves ||
+      block == BlockType.woodPlank ||
+      block == BlockType.thatchRoof ||
+      block == BlockType.vine ||
+      block == BlockType.stone ||
+      block == BlockType.cloudStone;
+
+  int? _findGroundSpreadY(
+    int sideX,
+    int referenceY,
+    BlockType plantBlock,
+    CropPlot crop,
+  ) {
+    for (final dy in const [0, -1, 1]) {
+      final gy = referenceY + dy;
+      if (gy < 1 || gy >= height - 1) continue;
+      if (!getBlock(sideX, gy + 1).isSolid) continue;
+      if (crops.containsKey('$sideX,$gy')) continue;
+      final existing = getBlock(sideX, gy);
+      if (existing == BlockType.air ||
+          (existing == plantBlock &&
+              crop.overgrownTiles.contains((sideX, gy)))) {
+        return gy;
+      }
+    }
+    return null;
+  }
+
+  int _collectTrunkTiles(
+    CropPlot crop,
+    BlockType plantBlock,
+    int targetTrunkHeight,
+    List<(int, int)> candidateTiles,
+  ) {
+    final tx = crop.tileX;
+    final ty = crop.tileY;
+    int actualTopDy = 0;
+    for (int dy = 0; dy < targetTrunkHeight; dy++) {
+      final gy = ty - dy;
+      if (gy < 1) break;
+      final existing = getBlock(tx, gy);
+      if (dy > 0 &&
+          existing != BlockType.air &&
+          !(existing == plantBlock && crop.overgrownTiles.contains((tx, gy)))) {
+        break;
+      }
+      candidateTiles.add((tx, gy));
+      actualTopDy = dy;
+    }
+    return actualTopDy;
+  }
+
+  void _collectGroundSpreadTiles(
+    CropPlot crop,
+    BlockType plantBlock,
+    double scale,
+    List<(int, int)> candidateTiles, {
+    required double firstStepThreshold,
+    required double firstMoundThreshold,
+    required double secondStepThreshold,
+    double? secondMoundThreshold,
+  }) {
+    final tx = crop.tileX;
+    final ty = crop.tileY;
+    int leftSpread = 0;
+    int rightSpread = 0;
+    if (scale >= firstStepThreshold) {
+      for (final dir in const [-1, 1]) {
+        final sideX1 = tx + dir;
+        final gy1 = _findGroundSpreadY(sideX1, ty, plantBlock, crop);
+        if (gy1 != null) {
+          candidateTiles.add((sideX1, gy1));
+          if (dir < 0) {
+            leftSpread = 1;
+          } else {
+            rightSpread = 1;
+          }
+          if (scale >= firstMoundThreshold &&
+              gy1 - 1 >= 1 &&
+              !getBlock(sideX1, gy1 - 1).isSolid) {
+            candidateTiles.add((sideX1, gy1 - 1));
+          }
+          if (scale >= secondStepThreshold) {
+            final sideX2 = tx + dir * 2;
+            final gy2 = _findGroundSpreadY(sideX2, gy1, plantBlock, crop);
+            if (gy2 != null) {
+              candidateTiles.add((sideX2, gy2));
+              if (dir < 0) {
+                leftSpread = 2;
+              } else {
+                rightSpread = 2;
+              }
+              if (secondMoundThreshold != null &&
+                  scale >= secondMoundThreshold &&
+                  gy2 - 1 >= 1 &&
+                  !getBlock(sideX2, gy2 - 1).isSolid) {
+                candidateTiles.add((sideX2, gy2 - 1));
+              }
+            }
+          }
+        }
+      }
+    }
+    crop.spreadLeft = leftSpread;
+    crop.spreadRight = rightSpread;
+  }
+
   void _syncCropOvergrowthBlocks(CropPlot crop) {
     if (crop.seedType == ItemType.mahoganySapling) return;
-    if (crop.growthProgress < 0.65) return;
+    final scale = crop.effectiveGrowthScale;
+    final isClimber =
+        crop.seedType.plantGrowthHabit == PlantGrowthHabit.climber;
+    if (scale < (isClimber ? 0.58 : 0.65)) return;
 
     final plantBlock =
         crop.seedType == ItemType.thornVineSeeds
@@ -2285,38 +2404,233 @@ final class JungleWorld {
             : BlockType.overgrownStalk;
     final tx = crop.tileX;
     final ty = crop.tileY;
+    final candidateTiles = <(int, int)>[];
 
-    final candidateTiles = <(int, int)>[
-      (tx, ty),
-      if (ty - 1 >= 1) (tx, ty - 1),
-    ];
-
-    if (crop.growthProgress >= 0.88) {
-      if (crop.seedType.maxPlantHeightTiles >= 3 && ty - 2 >= 1) {
-        candidateTiles.add((tx, ty - 2));
-      }
-      if (crop.seedType.maxPlantWidthTiles >= 3) {
-        if (crop.seedType == ItemType.bananaSeeds ||
-            crop.seedType == ItemType.mangoSeeds) {
-          if (ty - 1 >= 1) {
-            candidateTiles.add((tx - 1, ty - 1));
-            candidateTiles.add((tx + 1, ty - 1));
-          }
-        } else {
-          // Spreading brambles & thorny briar thickets expand horizontally along the ground!
-          for (final sideX in [tx - 1, tx + 1]) {
-            if (getBlock(sideX, ty + 1).isSolid &&
-                !crops.containsKey('$sideX,$ty')) {
-              candidateTiles.add((sideX, ty));
-              if (crop.seedType == ItemType.thornVineSeeds &&
-                  crop.growthProgress >= 0.96 &&
-                  ty - 1 >= 1) {
-                candidateTiles.add((sideX, ty - 1));
-              }
+    switch (crop.seedType.plantGrowthHabit) {
+      case PlantGrowthHabit.tallPalm:
+        // Tall Banana Palm: stretches 5-6 tiles skyward with lower shoots and
+        // a sweeping 5-tile-wide tropical frond crown.
+        final targetTrunkHeight =
+            scale >= 1.32
+                ? 6
+                : scale >= 0.95
+                ? 5
+                : scale >= 0.85
+                ? 3
+                : 2;
+        final actualTopDy = _collectTrunkTiles(
+          crop,
+          plantBlock,
+          targetTrunkHeight,
+          candidateTiles,
+        );
+        if (scale >= 0.85 && actualTopDy >= 1 && ty - 1 >= 1) {
+          candidateTiles.add((tx - 1, ty - 1));
+          candidateTiles.add((tx + 1, ty - 1));
+        }
+        if (scale >= 0.95 && actualTopDy >= 3 && ty - 3 >= 1) {
+          candidateTiles.add((tx - 1, ty - 3));
+          candidateTiles.add((tx + 1, ty - 3));
+        }
+        if (scale >= 1.15 && actualTopDy >= 4) {
+          final crownY = ty - math.min<int>(actualTopDy, 4);
+          if (crownY >= 1) {
+            for (final dx in const [-2, -1, 1, 2]) {
+              candidateTiles.add((tx + dx, crownY));
             }
           }
         }
-      }
+
+      case PlantGrowthHabit.broadTree:
+        // Broad Mango Orchard Tree: sturdy trunk with multi-tier 5x5 canopy boughs.
+        final targetTrunkHeight =
+            scale >= 1.32
+                ? 5
+                : scale >= 0.95
+                ? 4
+                : scale >= 0.85
+                ? 3
+                : 2;
+        final actualTopDy = _collectTrunkTiles(
+          crop,
+          plantBlock,
+          targetTrunkHeight,
+          candidateTiles,
+        );
+        if (scale >= 0.85 && actualTopDy >= 1 && ty - 1 >= 1) {
+          candidateTiles.add((tx - 1, ty - 1));
+          candidateTiles.add((tx + 1, ty - 1));
+        }
+        if (scale >= 0.95 && actualTopDy >= 2) {
+          candidateTiles.add((tx - 1, ty - 2));
+          candidateTiles.add((tx + 1, ty - 2));
+          if (actualTopDy >= 3 && ty - 3 >= 1) {
+            candidateTiles.add((tx - 1, ty - 3));
+            candidateTiles.add((tx + 1, ty - 3));
+          }
+        }
+        if (scale >= 1.15 && actualTopDy >= 2) {
+          candidateTiles.add((tx - 2, ty - 2));
+          candidateTiles.add((tx + 2, ty - 2));
+          if (actualTopDy >= 3 && ty - 3 >= 1) {
+            candidateTiles.add((tx - 2, ty - 3));
+            candidateTiles.add((tx + 2, ty - 3));
+          }
+        }
+        if (scale >= 1.32 && actualTopDy >= 4 && ty - 4 >= 1) {
+          candidateTiles.add((tx - 1, ty - 4));
+          candidateTiles.add((tx + 1, ty - 4));
+        }
+
+      case PlantGrowthHabit.bushySpreader:
+        // Sprawling Berry Brambles & Medicinal Herb Thickets: creep across up
+        // to 5 horizontal ground tiles (hugging 1-tile steps) and mound 2-3 tall.
+        candidateTiles.add((tx, ty));
+        if (ty - 1 >= 1 && !getBlock(tx, ty - 1).isSolid) {
+          candidateTiles.add((tx, ty - 1));
+          if (scale >= 1.22 && ty - 2 >= 1 && !getBlock(tx, ty - 2).isSolid) {
+            candidateTiles.add((tx, ty - 2));
+          }
+        }
+        _collectGroundSpreadTiles(
+          crop,
+          plantBlock,
+          scale,
+          candidateTiles,
+          firstStepThreshold: 0.82,
+          firstMoundThreshold: 0.92,
+          secondStepThreshold:
+              crop.seedType == ItemType.berrySeeds ? 1.12 : 1.22,
+          secondMoundThreshold: 1.34,
+        );
+
+      case PlantGrowthHabit.climber:
+        // Active Climbers (Briar Thorn-Vine, Nepenthes Pitcher Vine, Glow-Bulb
+        // Liana): detect adjacent stone cliffs, hut walls, tree trunks, or
+        // overhead trellises and scale 4-6 tiles upward.
+        final maxHeight = crop.seedType.maxPlantHeightTiles;
+        int leftSupport = 0;
+        int rightSupport = 0;
+        bool hasOverheadTrellis = false;
+        for (int dy = 0; dy < maxHeight; dy++) {
+          final gy = ty - dy;
+          if (gy < 1) break;
+          if (dy > 0 && getBlock(tx, gy).isSolid) {
+            if (_isOverheadTrellisBlock(getBlock(tx, gy))) {
+              hasOverheadTrellis = true;
+            }
+            break;
+          }
+          if (_isClimbSupportBlock(getBlock(tx - 1, gy))) {
+            leftSupport++;
+          }
+          if (_isClimbSupportBlock(getBlock(tx + 1, gy))) {
+            rightSupport++;
+          }
+          if (dy >= 1 &&
+              !crop.climbedVineTiles.contains((tx, gy - 1)) &&
+              _isOverheadTrellisBlock(getBlock(tx, gy - 1))) {
+            hasOverheadTrellis = true;
+          }
+        }
+
+        final attachDirection =
+            (leftSupport == 0 && rightSupport == 0)
+                ? 0
+                : (leftSupport >= rightSupport ? -1 : 1);
+        crop.climbAttachDirection = attachDirection;
+
+        final hasSupport = attachDirection != 0 || hasOverheadTrellis;
+        final targetClimbHeight =
+            hasSupport
+                ? (scale >= 1.28
+                    ? maxHeight
+                    : scale >= 1.08
+                    ? maxHeight - 1
+                    : scale >= 0.90
+                    ? math.min(maxHeight, 4)
+                    : scale >= 0.74
+                    ? math.min(maxHeight, 3)
+                    : 2)
+                : (scale >= 1.22
+                    ? math.min(maxHeight, 4)
+                    : scale >= 0.88
+                    ? math.min(maxHeight, 3)
+                    : 2);
+
+        if (scale >= 0.65) {
+          candidateTiles.add((tx, ty));
+        }
+
+        int actualClimbed = 1;
+        for (int dy = 1; dy < targetClimbHeight; dy++) {
+          final gy = ty - dy;
+          if (gy < 1) break;
+          final existing = getBlock(tx, gy);
+          if (existing.isSolid) break;
+
+          final hasWallBeside =
+              attachDirection != 0 &&
+              (_isClimbSupportBlock(getBlock(tx + attachDirection, gy)) ||
+                  _isClimbSupportBlock(getBlock(tx + attachDirection, gy + 1)));
+          final sproutClimbableVine =
+              crop.seedType != ItemType.thornVineSeeds &&
+              (hasWallBeside || hasOverheadTrellis);
+
+          if (sproutClimbableVine) {
+            if (existing == BlockType.air ||
+                (existing == BlockType.overgrownStalk &&
+                    crop.overgrownTiles.contains((tx, gy)))) {
+              blocks[gy][tx] = BlockType.vine;
+              crop.overgrownTiles.remove((tx, gy));
+              crop.climbedVineTiles.add((tx, gy));
+              actualClimbed = dy + 1;
+            } else if (existing == BlockType.vine &&
+                crop.climbedVineTiles.contains((tx, gy))) {
+              // Already owned by this climber; never adopt pre-existing world vines.
+              actualClimbed = dy + 1;
+            } else {
+              break;
+            }
+          } else if (scale >= 0.65) {
+            if (existing == BlockType.air ||
+                (existing == plantBlock &&
+                    crop.overgrownTiles.contains((tx, gy)))) {
+              candidateTiles.add((tx, gy));
+              actualClimbed = dy + 1;
+            } else {
+              break;
+            }
+          }
+        }
+        crop.climbedHeight = actualClimbed;
+
+        if (crop.seedType == ItemType.thornVineSeeds) {
+          // Briar Thorn-Vines also sprawl wide along terrain into a 5-tile
+          // predator-blocking thorny perimeter.
+          _collectGroundSpreadTiles(
+            crop,
+            plantBlock,
+            scale,
+            candidateTiles,
+            firstStepThreshold: 0.85,
+            firstMoundThreshold: 0.96,
+            secondStepThreshold: 1.15,
+          );
+        } else if (scale >= 1.20 && actualClimbed >= 3 && ty - 2 >= 1) {
+          // Lush Pitcher & Glow-Bulb climbers drape hanging side fronds away
+          // from the wall/trunk they climb.
+          final drapeSides =
+              attachDirection == 0 ? const [-1, 1] : [-attachDirection];
+          for (final sideDir in drapeSides) {
+            if (!getBlock(tx + sideDir, ty - 2).isSolid) {
+              candidateTiles.add((tx + sideDir, ty - 2));
+            }
+          }
+        }
+
+      case PlantGrowthHabit.canopyGiant:
+        break;
     }
 
     for (final (gx, gy) in candidateTiles) {
@@ -2325,7 +2639,8 @@ final class JungleWorld {
       if (existing == BlockType.air) {
         blocks[gy][gx] = plantBlock;
         crop.overgrownTiles.add((gx, gy));
-      } else if (existing == plantBlock) {
+      } else if (existing == plantBlock &&
+          (crop.overgrownTiles.contains((gx, gy)) || (gx == tx && gy == ty))) {
         crop.overgrownTiles.add((gx, gy));
       }
     }
@@ -2340,13 +2655,22 @@ final class JungleWorld {
         }
       }
     }
+    for (final (gx, gy) in crop.climbedVineTiles) {
+      if (gy >= 0 && gy < height && getBlock(gx, gy) == BlockType.vine) {
+        blocks[gy][gx] = BlockType.air;
+      }
+    }
     crop.overgrownTiles.clear();
+    crop.climbedVineTiles.clear();
+    crop.climbedHeight = 0;
+    crop.spreadLeft = 0;
+    crop.spreadRight = 0;
   }
 
   /// Chops down an overgrown multi-tile plant (or standalone
   /// [BlockType.overgrownStalk] / [BlockType.thornyBriar] block) at ([tx], [ty]),
-  /// clearing all of its multi-tile foliage and dropping plant fibers, thatch,
-  /// logs, and seeds.
+  /// clearing all of its multi-tile foliage and climbed vines while dropping
+  /// plant fibers, thatch, logs, and seeds.
   bool chopOvergrownPlantAt(int tx, int ty) {
     final block = getBlock(tx, ty);
     final crop = findCropOccupyingTile(tx, ty);
@@ -2355,18 +2679,21 @@ final class JungleWorld {
     swingAnimationTimer = 0.22;
     if (crop != null) {
       final key = '${crop.tileX},${crop.tileY}';
+      final isGiantLush = crop.lushGrowth >= 0.50;
       if (crop.isMature && crop.seedType != ItemType.thornVineSeeds) {
         _harvestMatureCrop(key, crop);
       }
       _clearCropOvergrowthBlocks(crop);
       crops.remove(key);
-      addItem(ItemType.vineFiber, 2);
-      addItem(ItemType.thatchBundle, 1);
+      final fiberDrop = isGiantLush ? 3 : 2;
+      final thatchDrop = isGiantLush ? 2 : 1;
+      addItem(ItemType.vineFiber, fiberDrop);
+      addItem(ItemType.thatchBundle, thatchDrop);
       addItem(crop.seedType, 1);
       if (crop.seedType == ItemType.mangoSeeds ||
           crop.seedType == ItemType.bananaSeeds ||
           crop.seedType == ItemType.mahoganySapling) {
-        addItem(ItemType.woodLogItem, 1);
+        addItem(ItemType.woodLogItem, isGiantLush ? 2 : 1);
       }
       emitSound(
         SoundCue.harvestCrop,
@@ -2374,7 +2701,7 @@ final class JungleWorld {
         worldY: ty * tileSize + tileSize * 0.5,
       );
       setBanner(
-        '🪓 Chopped down overgrown ${crop.seedType.icon} ${crop.seedType.label} (+2 🪢 Vine Fiber, +1 🍃 Thatch & Seed)!',
+        '🪓 Chopped down ${isGiantLush ? "giant " : "overgrown "}${crop.seedType.icon} ${crop.seedType.label} (+$fiberDrop 🪢 Vine Fiber, +$thatchDrop 🍃 Thatch & Seed)!',
       );
       return true;
     }
@@ -2567,10 +2894,14 @@ final class JungleWorld {
     }
     for (final crop in crops.values) {
       if (crop.seedType == ItemType.glowBulbSeeds &&
-          crop.growthProgress >= 0.30 &&
-          (crop.tileX - tx).abs() <= 6 &&
-          (crop.tileY - ty).abs() <= 6) {
-        return true;
+          crop.growthProgress >= 0.30) {
+        final radius = crop.lushGrowth >= 0.40 ? 8 : 6;
+        final topY = crop.tileY - math.max(0, crop.climbedHeight - 1);
+        if ((crop.tileX - tx).abs() <= radius &&
+            ty >= topY - radius &&
+            ty <= crop.tileY + radius) {
+          return true;
+        }
       }
     }
     return false;
@@ -2605,10 +2936,13 @@ final class JungleWorld {
     for (final crop in crops.values) {
       if ((crop.seedType == ItemType.healingHerbSeeds ||
               crop.seedType == ItemType.pitcherPlantSeeds) &&
-          crop.growthProgress >= 0.30 &&
-          (crop.tileX - tx).abs() <= 6 &&
-          (crop.tileY - ty).abs() <= 5) {
-        return true;
+          crop.growthProgress >= 0.30) {
+        final radiusX = crop.lushGrowth >= 0.40 ? 8 : 6;
+        final radiusY = crop.lushGrowth >= 0.40 ? 7 : 5;
+        if ((crop.tileX - tx).abs() <= radiusX &&
+            (crop.tileY - ty).abs() <= radiusY) {
+          return true;
+        }
       }
     }
     return false;
@@ -3407,7 +3741,10 @@ final class JungleWorld {
         crop.isFertilized = true;
       }
 
-      if (!crop.isMature) {
+      final canGrowFurther =
+          !crop.isMature ||
+          (crop.seedType != ItemType.mahoganySapling && crop.lushGrowth < 1.0);
+      if (canGrowFurther) {
         final climate = evaluateMicroclimate(crop.tileX, crop.tileY);
         crop.soilType = climate.soilType;
         final habitatMult = climate.growthMultiplierFor(crop.seedType);
@@ -3438,27 +3775,51 @@ final class JungleWorld {
             pollinationBoost *
             fertilizerBoost;
 
-        crop.growthProgress = (crop.growthProgress + dt * rate).clamp(0.0, 1.0);
+        if (!crop.isMature) {
+          crop.growthProgress = (crop.growthProgress + dt * rate).clamp(
+            0.0,
+            1.0,
+          );
+          if (crop.isMature) {
+            crop.hasMatured = true;
+          }
+        } else {
+          crop.hasMatured = true;
+          // Mature plants keep flourishing into giant palms, wide bushes & tall
+          // climbers over time!
+          crop.lushGrowth = (crop.lushGrowth + dt * rate * 0.72).clamp(
+            0.0,
+            1.0,
+          );
+        }
+      } else if (crop.isMature) {
+        crop.hasMatured = true;
       }
 
-      // Update articulated vine/stem segment count as the plant matures.
+      // Update articulated vine/stem segment count as the plant matures & grows lush.
+      final scale = crop.effectiveGrowthScale;
       final targetVineSegments =
-          crop.growthProgress >= 0.95
+          scale >= 1.32
+              ? 6
+              : scale >= 1.12
+              ? 5
+              : scale >= 0.95
               ? 4
-              : crop.growthProgress >= 0.72
+              : scale >= 0.72
               ? 3
-              : crop.growthProgress >= 0.48
+              : scale >= 0.48
               ? 2
-              : crop.growthProgress >= 0.24
+              : scale >= 0.24
               ? 1
               : 0;
       if (targetVineSegments > crop.vineSegments) {
         crop.vineSegments = targetVineSegments;
       }
 
-      // Climbing vine tendrils: vining species grown beneath canopy leaves,
-      // wooden trellises, or roofs extend climbable vine lianas upward!
-      if (crop.isViningSpecies &&
+      // Overhead trellis vine tendrils for non-climber berry brambles grown
+      // beneath canopy leaves, wooden trellises, or thatch roofs (active
+      // climbers handle their own wall/trunk/trellis climbing below).
+      if (crop.seedType == ItemType.berrySeeds &&
           crop.growthProgress >= 0.58 &&
           crop.tileY >= 3 &&
           getBlock(crop.tileX, crop.tileY - 1) == BlockType.air) {
@@ -3473,15 +3834,17 @@ final class JungleWorld {
             above3 == BlockType.woodPlank;
         if (hasTrellisAbove) {
           blocks[crop.tileY - 1][crop.tileX] = BlockType.vine;
+          crop.climbedVineTiles.add((crop.tileX, crop.tileY - 1));
           if (above2 == BlockType.air &&
               (above3 == BlockType.leaves || above3 == BlockType.woodPlank)) {
             blocks[crop.tileY - 2][crop.tileX] = BlockType.vine;
+            crop.climbedVineTiles.add((crop.tileX, crop.tileY - 2));
           }
         }
       }
 
-      // Expand multi-tile foliage stalks/thickets into the world grid as the
-      // plant grows large (>= 0.65) (walk-through for explorer; briars block predators).
+      // Expand multi-tile foliage stalks, tall palms, bushy spreaders, and wall
+      // climbers into the world grid (walk-through for explorer; briars block predators).
       _syncCropOvergrowthBlocks(crop);
 
       if (crop.isMature && crop.seedType == ItemType.mahoganySapling) {
@@ -3490,20 +3853,39 @@ final class JungleWorld {
 
       // Active plant-animal interactions for defensive/carnivorous plants:
       if (crop.growthProgress >= 0.33 && crop.effectCooldown <= 0) {
+        bool touchesPlantReach(JungleAnimal animal, double margin) {
+          final plantWorldX = crop.tileX * tileSize + tileSize * 0.5;
+          final plantWorldY = (crop.tileY + 1) * tileSize;
+          if ((animal.x - plantWorldX).abs() <= margin &&
+              (animal.y - plantWorldY).abs() <= margin) {
+            return true;
+          }
+          for (final (gx, gy) in crop.overgrownTiles.followedBy(
+            crop.climbedVineTiles,
+          )) {
+            final txWorldX = gx * tileSize + tileSize * 0.5;
+            final tyWorldY = (gy + 1) * tileSize;
+            if ((animal.x - txWorldX).abs() <= margin &&
+                (animal.y - tyWorldY).abs() <= margin) {
+              return true;
+            }
+          }
+          return false;
+        }
+
         final plantWorldX = crop.tileX * tileSize + tileSize * 0.5;
-        final plantWorldY = (crop.tileY + 1) * tileSize;
 
         if (crop.seedType == ItemType.thornVineSeeds) {
-          // Briar Thorn-Vine pricks and knocks back hostile predators!
+          // Briar Thorn-Vine pricks and knocks back hostile predators across
+          // its entire sprawling & climbing briar thicket!
           for (int i = animals.length - 1; i >= 0; i--) {
             final animal = animals[i];
             if (animal.type != AnimalType.jaguar &&
                 animal.type != AnimalType.snake) {
               continue;
             }
-            final dx = animal.x - plantWorldX;
-            final dy = animal.y - plantWorldY;
-            if (dx.abs() <= 24.0 && dy.abs() <= 24.0) {
+            if (touchesPlantReach(animal, 24.0)) {
+              final dx = animal.x - plantWorldX;
               final thornDamage = crop.isMature ? 12.0 : 8.0;
               animal.health -= thornDamage;
               animal.hurtFlashTimer = 0.3;
@@ -3542,9 +3924,7 @@ final class JungleWorld {
                 animal.type == AnimalType.snake ||
                 (animal.type == AnimalType.beeSwarm && animal.isAngry);
             if (!isTarget) continue;
-            final dx = animal.x - plantWorldX;
-            final dy = animal.y - plantWorldY;
-            if (dx.abs() <= 26.0 && dy.abs() <= 26.0) {
+            if (touchesPlantReach(animal, 26.0)) {
               animal.health -= 14.0;
               animal.hurtFlashTimer = 0.35;
               animal.vx *= 0.2;

@@ -1058,27 +1058,38 @@ enum ItemType {
     _ => ItemType.jungleBerry,
   };
 
-  /// Maximum vertical height in tiles (`2..7`) reached when this seed grows big.
-  int get maxPlantHeightTiles => switch (this) {
-    ItemType.mahoganySapling => 7,
-    ItemType.bananaSeeds || ItemType.mangoSeeds || ItemType.thornVineSeeds => 3,
+  /// Growth habit archetype describing how this seed expands across tiles.
+  PlantGrowthHabit get plantGrowthHabit => switch (this) {
+    ItemType.bananaSeeds => PlantGrowthHabit.tallPalm,
+    ItemType.mangoSeeds => PlantGrowthHabit.broadTree,
     ItemType.berrySeeds ||
+    ItemType.healingHerbSeeds => PlantGrowthHabit.bushySpreader,
+    ItemType.thornVineSeeds ||
     ItemType.pitcherPlantSeeds ||
-    ItemType.glowBulbSeeds ||
-    ItemType.healingHerbSeeds => 2,
+    ItemType.glowBulbSeeds => PlantGrowthHabit.climber,
+    ItemType.mahoganySapling => PlantGrowthHabit.canopyGiant,
+    _ => PlantGrowthHabit.bushySpreader,
+  };
+
+  /// Maximum vertical height in tiles (`3..8`) reached when this seed grows big.
+  int get maxPlantHeightTiles => switch (this) {
+    ItemType.mahoganySapling => 8,
+    ItemType.bananaSeeds || ItemType.thornVineSeeds => 6,
+    ItemType.mangoSeeds || ItemType.pitcherPlantSeeds => 5,
+    ItemType.glowBulbSeeds => 4,
+    ItemType.berrySeeds || ItemType.healingHerbSeeds => 3,
     _ => 1,
   };
 
-  /// Maximum horizontal width in tiles (`2..5`) spanned when this seed grows big.
+  /// Maximum horizontal width in tiles (`3..5`) spanned when this seed grows big.
   int get maxPlantWidthTiles => switch (this) {
-    ItemType.mahoganySapling => 5,
+    ItemType.mahoganySapling ||
     ItemType.bananaSeeds ||
     ItemType.mangoSeeds ||
-    ItemType.thornVineSeeds ||
-    ItemType.berrySeeds => 3,
-    ItemType.pitcherPlantSeeds ||
-    ItemType.glowBulbSeeds ||
-    ItemType.healingHerbSeeds => 2,
+    ItemType.berrySeeds ||
+    ItemType.healingHerbSeeds ||
+    ItemType.thornVineSeeds => 5,
+    ItemType.pitcherPlantSeeds || ItemType.glowBulbSeeds => 3,
     _ => 1,
   };
 
@@ -1103,6 +1114,29 @@ enum ItemType {
       'Thrives in 🌱 Jungle Loam & 🌋 Volcanic Ash; struggles to root in soft 🌺 Peat Bog.',
     _ => '',
   };
+}
+
+/// Botanical growth habit archetype for sown [CropPlot] flora.
+enum PlantGrowthHabit {
+  /// Sprawling multi-mound bush that sends runners sideways along terrain.
+  bushySpreader('🌿 Bushy Spreader'),
+
+  /// Climbing vine or briar liana that scales walls, tree trunks, and trellises.
+  climber('🧗 Climber'),
+
+  /// Tall curving palm that stretches skyward with a wide radiating frond crown.
+  tallPalm('🌴 Tall Palm'),
+
+  /// Broad multi-bough orchard tree with a wide fruiting canopy.
+  broadTree('🌳 Broad Tree'),
+
+  /// Towering rainforest canopy giant that transforms into solid timber.
+  canopyGiant('🌲 Canopy Giant');
+
+  const PlantGrowthHabit(this.label);
+
+  /// Human-readable badge describing this growth habit.
+  final String label;
 }
 
 /// Snapshot of the soil substrate and local microclimate at a world tile.
@@ -1227,7 +1261,7 @@ final class MicroclimateProfile {
 final class CropPlot {
   /// Creates a crop plot at tile coordinates ([tileX], [tileY]).
   ///
-  /// It is an error if [growthProgress] is outside the range `0.0..1.0`.
+  /// Both [growthProgress] and [lushGrowth] must be within `0.0..1.0` inclusive.
   CropPlot({
     required this.tileX,
     required this.tileY,
@@ -1235,15 +1269,28 @@ final class CropPlot {
     this.soilType = SoilType.jungleLoam,
     this.lastHabitatMultiplier = 1.0,
     this.growthProgress = 0.0,
+    this.lushGrowth = 0.0,
+    bool hasMatured = false,
     this.isPollinated = false,
     this.isFertilized = false,
     this.effectCooldown = 0.0,
     this.vineSegments = 0,
-  }) {
+    this.climbedHeight = 0,
+    this.climbAttachDirection = 0,
+    this.spreadLeft = 0,
+    this.spreadRight = 0,
+  }) : hasMatured = hasMatured || growthProgress >= 1.0 {
     if (growthProgress < 0.0 || growthProgress > 1.0) {
       throw ArgumentError.value(
         growthProgress,
         'growthProgress',
+        'Must be between 0.0 and 1.0 inclusive.',
+      );
+    }
+    if (lushGrowth < 0.0 || lushGrowth > 1.0) {
+      throw ArgumentError.value(
+        lushGrowth,
+        'lushGrowth',
         'Must be between 0.0 and 1.0 inclusive.',
       );
     }
@@ -1267,6 +1314,15 @@ final class CropPlot {
   /// Normalized growth progress from `0.0` (freshly sowed) to `1.0` (ripe).
   double growthProgress;
 
+  /// Post-maturity lush expansion (`0.0..1.0`) that continues making mature
+  /// plants taller, wider, and wilder over time and persists across harvests.
+  double lushGrowth;
+
+  /// Whether this plant has reached maturity (`growthProgress >= 1.0`) at least
+  /// once, so perennial trees and bushes retain their established stature after
+  /// fruiting harvests without jumping ahead during initial growth.
+  bool hasMatured;
+
   /// Whether a [AnimalType.beeSwarm] or [AnimalType.toucan] has directly
   /// pollinated this plant's blossoms, granting bonus harvest yields.
   bool isPollinated;
@@ -1280,17 +1336,48 @@ final class CropPlot {
   /// digesting snakes).
   double effectCooldown;
 
-  /// Number of climbing or creeping vine/runner segments (`0..4`) sprouted by
+  /// Number of climbing or creeping vine/runner segments (`0..6`) sprouted by
   /// this plant as it matures.
   int vineSegments;
+
+  /// Vertical height in tiles (`0..6`) currently climbed along an adjacent
+  /// wall, tree trunk, or overhead trellis.
+  int climbedHeight;
+
+  /// Horizontal side of an adjacent wall or trunk that a climber has latched
+  /// onto (`-1` left, `+1` right, `0` overhead trellis or free-standing).
+  int climbAttachDirection;
+
+  /// Number of horizontal tiles (`0..2`) this bushy plant has spread to the left.
+  int spreadLeft;
+
+  /// Number of horizontal tiles (`0..2`) this bushy plant has spread to the right.
+  int spreadRight;
 
   /// World tile coordinates `(tx, ty)` currently occupied by pass-through
   /// [BlockType.overgrownStalk] or [BlockType.thornyBriar] foliage grown by
   /// this plant as it expands beyond a single square.
   final Set<(int, int)> overgrownTiles = {};
 
+  /// World tile coordinates `(tx, ty)` where this climbing plant sprouted a
+  /// climbable [BlockType.vine] ladder up a wall, trunk, or trellis.
+  final Set<(int, int)> climbedVineTiles = {};
+
   /// Whether this plant has expanded into multi-tile overgrown foliage blocks.
-  bool get hasOvergrowth => overgrownTiles.isNotEmpty;
+  bool get hasOvergrowth =>
+      overgrownTiles.isNotEmpty || climbedVineTiles.isNotEmpty;
+
+  /// Effective baseline progress (`0.0..1.0`) that stays at least `0.82` once
+  /// a perennial plant has reached [hasMatured], so established trees and
+  /// bushes keep their stature immediately after fruiting harvests.
+  double get establishedGrowthProgress =>
+      hasMatured && growthProgress < 0.82 ? 0.82 : growthProgress;
+
+  /// Combined visual and structural size factor (`0.0..1.50`), keeping
+  /// established perennial trees and bushes large even right after fruiting
+  /// harvests while expanding further as [lushGrowth] increases.
+  double get effectiveGrowthScale =>
+      establishedGrowthProgress + lushGrowth * 0.50;
 
   /// Whether this plant species naturally extends climbing tendrils and
   /// creeping stolon vines as it grows.
@@ -1301,12 +1388,10 @@ final class CropPlot {
       seedType == ItemType.glowBulbSeeds;
 
   /// Number of articulated stem/vine nodes visible at the current
-  /// [growthProgress] (`1..5`).
+  /// [growthProgress] and [lushGrowth] (`1..8`).
   int get stemNodeCount =>
-      (1 + (growthProgress * 4.0).floor() + (vineSegments > 0 ? 1 : 0)).clamp(
-        1,
-        6,
-      );
+      (1 + (effectiveGrowthScale * 4.5).floor() + (vineSegments > 0 ? 1 : 0))
+          .clamp(1, 8);
 
   /// Discrete visual growth stage in `0..3` (`0` = seed, `2` = flowering, `3` = ripe).
   int get stage {
